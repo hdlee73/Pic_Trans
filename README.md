@@ -32,6 +32,8 @@ git tag v1.0.1
 git push origin v1.0.1
 ```
 
+또는 GitHub의 **Actions → Android Release → Run workflow**에서 버전(예: `1.0.1`)을 입력해 실행해도 됩니다.
+
 ### 서명 키 등록 (권장)
 
 키를 등록하지 않으면 빌드마다 임시 키로 서명되어, 새 버전 설치 시 기존 앱을 지워야 할 수 있습니다.
