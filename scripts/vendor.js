@@ -26,4 +26,9 @@ for (const f of ['tesseract-core-simd-lstm.wasm.js', 'tesseract-core-lstm.wasm.j
   copy(path.join(core, f), `core/${f}`);
 }
 
-copy(path.join(mod('@tesseract.js-data/eng'), '4.0.0_best_int', 'eng.traineddata.gz'), 'lang/eng.traineddata.gz');
+// 안드로이드 빌드는 assets 안의 .gz 파일을 풀고 이름에서 .gz 를 떼어 버리므로
+// 처음부터 압축을 푼 파일로 넣는다
+const zlib = require('zlib');
+const gz = path.join(mod('@tesseract.js-data/eng'), '4.0.0_best_int', 'eng.traineddata.gz');
+fs.writeFileSync(path.join(out, 'lang', 'eng.traineddata'), zlib.gunzipSync(fs.readFileSync(gz)));
+console.log('vendor: lang/eng.traineddata');
