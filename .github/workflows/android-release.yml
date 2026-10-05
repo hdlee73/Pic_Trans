@@ -51,6 +51,7 @@ jobs:
           else
             echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set - signing with a temporary key"
             PASS="$(openssl rand -hex 16)"
+            echo "::add-mask::$PASS"
             keytool -genkeypair -v -keystore "$KS" -alias pictrans -keyalg RSA -keysize 2048 \
               -validity 10000 -storepass "$PASS" -keypass "$PASS" -dname "CN=Pic Trans"
             echo "ANDROID_KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
