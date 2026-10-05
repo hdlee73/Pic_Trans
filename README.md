@@ -86,6 +86,8 @@ npm run serve
 - 카메라: 브라우저 `getUserMedia` API (후면 카메라 기본, 🔄로 전환)
 - 문자 추출: [Tesseract.js](https://github.com/naptha/tesseract.js) — 기기 안에서 OCR 처리.
   엔진과 영어 데이터는 앱에 포함되어 있고(`npm ci` 때 `scripts/vendor.js`가 `www/vendor/`로 복사), 다른 언어는 처음 쓸 때 내려받습니다.
+  앱에 포함된 엔진을 못 쓰면 CDN에서 받아 다시 시도하고, 그래도 안 되면 멈추지 않고 오류를 표시합니다.
+  (안드로이드 빌드는 assets의 `.gz` 파일을 풀어서 넣기 때문에 언어 데이터는 압축하지 않은 채로 넣습니다.)
   신뢰도가 낮은 줄(아이콘·그림을 글자로 잘못 읽은 것)은 결과에서 뺍니다.
 - 번역: Google 번역(언어 자동 감지), 실패하면 [MyMemory](https://mymemory.translated.net/) 무료 번역 API로 재시도 — API 키 불필요.
   앱에서는 Capacitor 네이티브 HTTP로 요청해 브라우저 CORS 제한을 받지 않습니다.

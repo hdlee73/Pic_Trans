@@ -230,25 +230,72 @@ window.addEventListener('resize', () => showSelection(region));
 // vendor 폴더의 Tesseract 가 로드됐는지 (실패해서 CDN 으로 대체했으면 false)
 const vendorLoaded = !document.querySelector('script[src*="cdn.jsdelivr.net"]');
 
-function workerOptions(lang) {
+const OCR_STAGES = {
+  'loading tesseract core': 'OCR 엔진 불러오는 중…',
+  'initializing tesseract': 'OCR 엔진 시작 중…',
+  'loading language traineddata': '언어 데이터 불러오는 중…',
+  'initializing api': 'OCR 엔진 시작 중…',
+};
+
+// local: 앱에 포함된 파일 사용, false 면 CDN 에서 받음
+function workerOptions(lang, local) {
   const opts = {
     logger: (m) => {
       if (m.status === 'recognizing text') {
         ocrStatus.textContent = `인식 중… ${Math.round(m.progress * 100)}%`;
-      } else if (m.status && ocrBusy) {
-        ocrStatus.textContent = '언어 데이터 준비 중…';
+      } else if (OCR_STAGES[m.status]) {
+        ocrStatus.textContent = OCR_STAGES[m.status];
       }
     },
   };
-  if (vendorLoaded) {
+  if (local) {
     opts.workerPath = `${VENDOR}worker.min.js`;
     opts.corePath = `${VENDOR}core`;
     if (BUNDLED_LANGS.includes(lang)) {
+      // 안드로이드 빌드가 .gz 파일을 풀어서 넣으므로 압축하지 않은 파일을 쓴다
       opts.langPath = `${VENDOR}lang`;
-      opts.gzip = true;
+      opts.gzip = false;
     }
   }
   return opts;
+}
+
+// Tesseract 는 언어 데이터를 못 받으면 오류 없이 영원히 기다리므로
+// 오류 콜백과 시간 제한으로 실패를 알아챈다
+function startWorker(lang, local) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const fail = (err) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+    const timer = setTimeout(() => fail(new Error('시간 초과')), local ? 45000 : 120000);
+    Tesseract.createWorker(lang, 1, { ...workerOptions(lang, local), errorHandler: fail })
+      .then((w) => {
+        if (done) { w.terminate().catch(() => {}); return; }
+        done = true;
+        clearTimeout(timer);
+        resolve(w);
+      }, fail);
+  });
+}
+
+async function createOcrWorker(lang) {
+  if (vendorLoaded) {
+    try {
+      return await startWorker(lang, true);
+    } catch (err) {
+      console.warn('앱에 포함된 OCR 엔진을 쓰지 못해 CDN 으로 재시도', err);
+    }
+  }
+  try {
+    return await startWorker(lang, false);
+  } catch (err) {
+    console.error(err);
+    throw new Error('OCR 엔진을 준비하지 못했습니다. 인터넷 연결을 확인하고 🔍 문자 추출을 다시 눌러 주세요');
+  }
 }
 
 let worker = null;
@@ -264,7 +311,7 @@ function getWorker(lang) {
       worker = null;
       workerLang = null;
     }
-    const w = await Tesseract.createWorker(lang, 1, workerOptions(lang));
+    const w = await createOcrWorker(lang);
     await w.setParameters({ tessedit_pageseg_mode: '3', preserve_interword_spaces: '1' });
     worker = w;
     workerLang = lang;
@@ -298,9 +345,7 @@ async function runOcr() {
     if (text && autoRun.checked && !ocrPending) runTranslate();
   } catch (err) {
     console.error(err);
-    ocrStatus.textContent = navigator.onLine === false
-      ? '오류: 처음 사용하는 언어는 인터넷 연결이 필요합니다'
-      : `오류: ${err.message || err}`;
+    ocrStatus.textContent = `오류: ${err.message || err}`;
   } finally {
     ocrBusy = false;
     btnOcr.disabled = false;
