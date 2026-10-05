@@ -1,0 +1,97 @@
+name: Android Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Copy web assets into Android project
+        run: npx cap sync android
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          KS="$RUNNER_TEMP/release.keystore"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+            echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
+            echo "SIGNING_NOTE=" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set - signing with a temporary key"
+            PASS="$(openssl rand -hex 16)"
+            keytool -genkeypair -v -keystore "$KS" -alias pictrans -keyalg RSA -keysize 2048 \
+              -validity 10000 -storepass "$PASS" -keypass "$PASS" -dname "CN=Pic Trans"
+            echo "ANDROID_KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_ALIAS=pictrans" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_PASSWORD=$PASS" >> "$GITHUB_ENV"
+            echo "SIGNING_NOTE=⚠️ 임시 서명 키로 빌드되었습니다. 다음 버전으로 업데이트하려면 기존 앱을 삭제 후 설치해야 할 수 있습니다." >> "$GITHUB_ENV"
+          fi
+          echo "ANDROID_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
+
+      - name: Set version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_NAME=0.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+          fi
+          echo "VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Build APK and AAB
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease bundleRelease
+
+      - name: Collect outputs
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/PicTrans-${VERSION_NAME}.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "dist/PicTrans-${VERSION_NAME}.aab"
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pictrans-android
+          path: dist/*
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body: |
+            Pic Trans 안드로이드 앱 ${{ env.VERSION_NAME }}
+
+            - **PicTrans-${{ env.VERSION_NAME }}.apk** : 휴대폰에 바로 설치 (출처를 알 수 없는 앱 설치 허용 필요)
+            - **PicTrans-${{ env.VERSION_NAME }}.aab** : Google Play Console 업로드용
+
+            ${{ env.SIGNING_NOTE }}

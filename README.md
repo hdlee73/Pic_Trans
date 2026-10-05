@@ -16,16 +16,60 @@
 
 "촬영 후 자동 추출·번역"이 켜져 있으면 2~4단계가 촬영 직후 자동으로 진행됩니다.
 
-## 실행
+## 안드로이드 앱
 
-빌드 과정이 없는 정적 웹 앱입니다. 브라우저의 카메라 권한 정책 때문에 **HTTPS** 또는 **localhost**에서 열어야 합니다.
+[Releases](../../releases)에서 `PicTrans-<버전>.apk`를 내려받아 휴대폰에 설치합니다.
+(설정에서 "출처를 알 수 없는 앱 설치"를 허용해야 합니다. `.aab`는 Google Play 업로드용입니다.)
+
+웹 화면(`www/`)을 [Capacitor](https://capacitorjs.com/)로 감싼 앱이며, `android/`가 안드로이드 프로젝트입니다.
+
+### 새 버전 릴리스
+
+`v`로 시작하는 태그를 푸시하면 GitHub Actions(`.github/workflows/android-release.yml`)가 APK/AAB를 빌드해 Release를 만듭니다.
 
 ```bash
-python3 -m http.server 8000
-# 브라우저에서 http://localhost:8000 접속
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
-휴대폰에서 쓰려면 GitHub Pages 등 HTTPS 호스팅에 올리면 됩니다.
+### 서명 키 등록 (권장)
+
+키를 등록하지 않으면 빌드마다 임시 키로 서명되어, 새 버전 설치 시 기존 앱을 지워야 할 수 있습니다.
+한 번만 키를 만들어 저장소 **Settings → Secrets and variables → Actions**에 등록하세요.
+
+```bash
+keytool -genkeypair -v -keystore pictrans.keystore -alias pictrans \
+  -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 pictrans.keystore   # 출력값을 ANDROID_KEYSTORE_BASE64 로 등록
+```
+
+| Secret | 값 |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | 위 base64 출력 |
+| `ANDROID_KEYSTORE_PASSWORD` | 키스토어 비밀번호 |
+| `ANDROID_KEY_ALIAS` | `pictrans` |
+| `ANDROID_KEY_PASSWORD` | 키 비밀번호 (키스토어와 같으면 생략 가능) |
+
+키스토어 파일은 저장소에 올리지 말고 안전하게 따로 보관하세요. 잃어버리면 Play 스토어 앱을 업데이트할 수 없습니다.
+
+### 직접 빌드
+
+Node 22+, JDK 21, Android SDK가 필요합니다.
+
+```bash
+npm ci
+npx cap sync android
+cd android && ./gradlew assembleDebug   # app/build/outputs/apk/debug/
+```
+
+## 웹으로 실행
+
+브라우저의 카메라 권한 정책 때문에 **HTTPS** 또는 **localhost**에서 열어야 합니다.
+
+```bash
+npm run serve
+# 브라우저에서 http://localhost:8000 접속
+```
 
 ## 사용 기술
 

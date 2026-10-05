@@ -1,0 +1,17 @@
+{
+  "name": "pic-trans",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Camera OCR + Korean translation app",
+  "scripts": {
+    "serve": "python3 -m http.server 8000 --directory www",
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2"
+  }
+}

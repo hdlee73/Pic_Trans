@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pic Trans</string>
+    <string name="title_activity_main">Pic Trans</string>
+    <string name="package_name">io.github.hdlee73.pictrans</string>
+    <string name="custom_url_scheme">io.github.hdlee73.pictrans</string>
+</resources>
