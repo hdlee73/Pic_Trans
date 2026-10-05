@@ -1,0 +1,136 @@
+:root {
+  --bg: #f3f4f6;
+  --panel: #ffffff;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --media-bg: #111827;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0f17;
+    --panel: #161b26;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --border: #2a3242;
+    --accent: #3b82f6;
+    --media-bg: #000000;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+}
+
+/* 화면을 2 x 2 = 4개 영역으로 분할 */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  height: 100dvh;
+  padding: 8px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.panel header,
+.panel footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  flex-wrap: wrap;
+}
+
+.panel header { border-bottom: 1px solid var(--border); justify-content: space-between; }
+.panel footer { border-top: 1px solid var(--border); }
+
+h2 { margin: 0; font-size: 15px; }
+
+.status { font-size: 12px; color: var(--muted); }
+
+.body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+
+.media {
+  background: var(--media-bg);
+  align-items: center;
+  justify-content: center;
+}
+
+video, canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.placeholder {
+  position: absolute;
+  margin: 0;
+  padding: 12px;
+  color: #9ca3af;
+  font-size: 13px;
+  text-align: center;
+}
+
+textarea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: 0;
+  padding: 10px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+button, .button, select {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button:disabled { opacity: .5; cursor: default; }
+button.icon { padding: 2px 8px; }
+
+.check { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 4px; margin-right: auto; }
+
+/* 좁은 세로 화면(휴대폰)에서도 4분할 유지, 글자만 조금 작게 */
+@media (max-width: 600px) {
+  .grid { gap: 6px; padding: 6px; }
+  h2 { font-size: 13px; }
+  button, .button, select { font-size: 12px; padding: 5px 8px; }
+  textarea { font-size: 13px; padding: 8px; }
+}
