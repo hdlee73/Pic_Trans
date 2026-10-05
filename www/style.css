@@ -6,7 +6,12 @@
   --border: #e5e7eb;
   --accent: #2563eb;
   --accent-text: #ffffff;
-  --media-bg: #111827;
+  --media-bg: #000000;
+  --gap: 8px;
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,33 +22,59 @@
     --muted: #9ca3af;
     --border: #2a3242;
     --accent: #3b82f6;
-    --media-bg: #000000;
   }
 }
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* 화면을 2 x 2 = 4개 영역으로 분할 */
-.grid {
+/*
+ * 화면 배치 (Galaxy Z Fold 기준)
+ *  - 기본: 좁은 세로 화면 (접은 상태 세로) → 위: 카메라/사진, 아래: 결과
+ *      · 촬영 전에는 카메라가 화면 전체를 씀
+ *  - 가로로 넓거나 정사각형에 가까운 화면 (펼친 상태 세로·가로, 접은 상태 가로)
+ *      → 왼쪽: 카메라/사진, 오른쪽: 결과
+ */
+.app {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: 8px;
+  gap: var(--gap);
   height: 100dvh;
-  /* 안드로이드 앱(Capacitor)은 상태바·내비게이션바 높이를 --safe-area-inset-* 로 알려줌 */
   padding:
-    calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))
-    calc(8px + var(--safe-area-inset-right, env(safe-area-inset-right, 0px)))
-    calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))
-    calc(8px + var(--safe-area-inset-left, env(safe-area-inset-left, 0px)));
+    calc(var(--gap) + var(--safe-top))
+    calc(var(--gap) + var(--safe-right))
+    calc(var(--gap) + var(--safe-bottom))
+    calc(var(--gap) + var(--safe-left));
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.mode-camera .results { display: none; }
+.mode-photo .app { grid-template-rows: minmax(0, 42fr) minmax(0, 58fr); }
+
+@media (min-aspect-ratio: 3/4) {
+  .app,
+  .mode-photo .app {
+    grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .mode-camera .results { display: flex; }
+}
+
+/* 아주 넓은 가로 화면에서는 카메라 쪽을 조금 더 크게 */
+@media (min-aspect-ratio: 16/9) {
+  .app,
+  .mode-photo .app { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 }
 
 .panel {
@@ -53,89 +84,193 @@ html, body {
   min-height: 0;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
 }
 
-.panel header,
-.panel footer {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  flex-wrap: wrap;
-}
+/* ---------- 카메라 / 사진 ---------- */
 
-.panel header { border-bottom: 1px solid var(--border); justify-content: space-between; }
-.panel footer { border-top: 1px solid var(--border); }
+.stage { background: var(--media-bg); border-color: var(--media-bg); }
 
-h2 { margin: 0; font-size: 15px; }
-
-.status { font-size: 12px; color: var(--muted); }
-
-.body {
+.media {
   flex: 1;
   min-height: 0;
   position: relative;
   display: flex;
-}
-
-.media {
-  background: var(--media-bg);
   align-items: center;
   justify-content: center;
 }
 
 video, canvas {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  display: block;
+}
+
+canvas { touch-action: none; }
+
+.selection {
+  position: absolute;
+  border: 2px solid #facc15;
+  background: rgba(250, 204, 21, .15);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .35);
+  pointer-events: none;
 }
 
 .placeholder {
   position: absolute;
   margin: 0;
-  padding: 12px;
+  padding: 16px;
   color: #9ca3af;
-  font-size: 13px;
+  font-size: 14px;
   text-align: center;
 }
 
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 16px);
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .6);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px;
+  flex-wrap: wrap;
+}
+
+#camera-controls { justify-content: space-around; }
+
+.shutter {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background: #fff;
+  box-shadow: inset 0 0 0 3px #000;
+}
+.shutter:active { transform: scale(.94); }
+
+.stage .round {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: rgba(255, 255, 255, .15);
+  border-color: transparent;
+  color: #fff;
+}
+
+.stage button:not(.shutter):not(.round) {
+  background: rgba(255, 255, 255, .15);
+  border-color: transparent;
+  color: #fff;
+}
+.stage button.primary { background: var(--accent); }
+
+/* ---------- 결과 ---------- */
+
+.results { gap: 0; }
+
+.block {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#block-ocr { flex: 2; border-bottom: 1px solid var(--border); }
+#block-trans { flex: 3; }
+
+.block header,
+.block footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+.block header { border-bottom: 1px solid var(--border); }
+.block footer { border-top: 1px solid var(--border); }
+
+h2 { margin: 0; font-size: 15px; white-space: nowrap; }
+
+.status { font-size: 12px; color: var(--muted); margin-left: auto; }
+
 textarea {
   flex: 1;
+  min-height: 0;
   width: 100%;
   resize: none;
   border: 0;
-  padding: 10px;
+  padding: 10px 12px;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
   background: transparent;
   color: var(--text);
   outline: none;
 }
 
+#trans-text { font-size: 17px; }
+
 button, .button, select {
   font: inherit;
   font-size: 14px;
-  padding: 6px 12px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
   cursor: pointer;
 }
 
+select { padding: 4px 8px; }
+
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 button:disabled { opacity: .5; cursor: default; }
-button.icon { padding: 2px 8px; }
 
 .check { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 4px; margin-right: auto; }
 
-/* 좁은 세로 화면(휴대폰)에서도 4분할 유지, 글자만 조금 작게 */
-@media (max-width: 600px) {
-  .grid { gap: 6px; }
-  h2 { font-size: 13px; }
-  button, .button, select { font-size: 12px; padding: 5px 8px; }
-  textarea { font-size: 13px; padding: 8px; }
+/* 높이가 낮은 화면 (접은 상태 가로) : 여백과 버튼을 줄여 내용 영역 확보 */
+@media (max-height: 520px) {
+  :root { --gap: 6px; }
+  .controls { padding: 6px; gap: 8px; }
+  .shutter { width: 52px; height: 52px; }
+  .stage .round { width: 40px; height: 40px; font-size: 18px; }
+  .block header, .block footer { padding: 4px 10px; }
+  button, .button { padding: 6px 10px; }
+  textarea { font-size: 15px; padding: 6px 10px; }
+  #trans-text { font-size: 16px; }
+}
+
+/* 높이가 낮은 가로 화면에서는 카메라 버튼을 오른쪽 세로줄로 */
+@media (max-height: 520px) and (min-aspect-ratio: 3/2) {
+  .stage { flex-direction: row; }
+  .controls { flex-direction: column; flex-wrap: nowrap; }
+  #camera-controls { justify-content: space-around; }
+}
+
+/* 좁은 화면 (접은 상태 세로) */
+@media (max-width: 480px) {
+  h2 { font-size: 14px; }
+  .block header, .block footer { padding: 6px 10px; }
+  button, .button { font-size: 13px; padding: 7px 10px; }
 }
