@@ -1,5 +1,10 @@
 {
   "appId": "io.github.hdlee73.pictrans",
   "appName": "Pic Trans",
-  "webDir": "www"
+  "webDir": "www",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
 }

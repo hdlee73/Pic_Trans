@@ -3,6 +3,8 @@ name: Android Release
 on:
   push:
     tags: ['v*']
+  # PR마다 APK가 빌드되는지 확인 (Release는 만들지 않음, 빌드 결과는 Artifacts 에서 받을 수 있음)
+  pull_request:
   workflow_dispatch:
     inputs:
       version:
@@ -29,7 +31,7 @@ jobs:
           java-version: 21
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci   # postinstall 이 Tesseract OCR 파일을 www/vendor 로 복사함
 
       - name: Copy web assets into Android project
         run: npx cap sync android
