@@ -1,6 +1,6 @@
 {
   "appId": "io.github.hdlee73.pictrans",
-  "appName": "Pic Trans",
+  "appName": "Snap Read",
   "webDir": "www",
   "plugins": {
     "CapacitorHttp": {

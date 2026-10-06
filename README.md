@@ -1,4 +1,4 @@
-# Pic Trans
+# Snap Read
 
 카메라로 찍은 사진에서 문자·숫자를 추출하고 한국어로 번역하는 웹 앱입니다.
 
@@ -27,7 +27,7 @@
 
 ## 안드로이드 앱
 
-[Releases](../../releases)에서 `PicTrans-<버전>.apk`를 내려받아 휴대폰에 설치합니다.
+[Releases](../../releases)에서 `SnapRead-<버전>.apk`를 내려받아 휴대폰에 설치합니다.
 (설정에서 "출처를 알 수 없는 앱 설치"를 허용해야 합니다. `.aab`는 Google Play 업로드용입니다.)
 
 웹 화면(`www/`)을 [Capacitor](https://capacitorjs.com/)로 감싼 앱이며, `android/`가 안드로이드 프로젝트입니다.
