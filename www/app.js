@@ -21,6 +21,8 @@ const autoRun = $('auto-run');
 const LANG_MAP = {
   eng: 'en', jpn: 'ja', chi_sim: 'zh-CN', chi_tra: 'zh-TW', fra: 'fr',
   deu: 'de', spa: 'es', rus: 'ru', vie: 'vi', tha: 'th',
+  // 세로쓰기 전용 모델
+  jpn_vert: 'ja', chi_sim_vert: 'zh-CN', chi_tra_vert: 'zh-TW',
 };
 
 // 앱 안에 포함된 OCR 파일 (npm run vendor). 없으면 CDN에서 받는다
@@ -29,6 +31,12 @@ const BUNDLED_LANGS = ['eng'];
 
 // 사진 긴 변의 최대 크기. 너무 크면 휴대폰에서 인식이 느려짐
 const MAX_SIDE = 3000;
+
+// 상태 글자. "오류:" 로 시작하면 오류 색으로 표시
+function setStatus(el, text) {
+  el.textContent = text;
+  el.classList.toggle('error', text.startsWith('오류'));
+}
 
 const store = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -68,7 +76,7 @@ async function startCamera() {
   const run = ++cameraRun;
   if (!navigator.mediaDevices?.getUserMedia) {
     cameraMsg.hidden = false;
-    cameraMsg.textContent = '이 기기는 카메라를 지원하지 않습니다. 🖼️ 버튼으로 사진을 선택하세요.';
+    cameraMsg.textContent = '이 기기는 카메라를 지원하지 않습니다. 갤러리 버튼으로 사진을 선택하세요.';
     return;
   }
   cameraMsg.hidden = false;
@@ -127,6 +135,17 @@ $('file-input').addEventListener('change', (e) => {
 });
 
 $('btn-retake').addEventListener('click', () => setMode('camera'));
+
+// 자동으로 방향을 못 맞출 때를 위한 수동 회전
+$('btn-rotate').addEventListener('click', () => {
+  if (!hasPhoto) return;
+  const rotated = rotateCanvas(canvas, 90);
+  canvas.width = rotated.width;
+  canvas.height = rotated.height;
+  canvas.getContext('2d').drawImage(rotated, 0, 0);
+  clearRegion();
+  if (autoRun.checked) runOcr();
+});
 
 /* ---------- 찍은 사진 ---------- */
 
@@ -242,9 +261,9 @@ function workerOptions(lang, local) {
   const opts = {
     logger: (m) => {
       if (m.status === 'recognizing text') {
-        ocrStatus.textContent = `인식 중… ${Math.round(m.progress * 100)}%`;
+        setStatus(ocrStatus, `${passLabel}인식 중… ${Math.round(m.progress * 100)}%`);
       } else if (OCR_STAGES[m.status]) {
-        ocrStatus.textContent = OCR_STAGES[m.status];
+        setStatus(ocrStatus, OCR_STAGES[m.status]);
       }
     },
   };
@@ -294,7 +313,7 @@ async function createOcrWorker(lang) {
     return await startWorker(lang, false);
   } catch (err) {
     console.error(err);
-    throw new Error('OCR 엔진을 준비하지 못했습니다. 인터넷 연결을 확인하고 🔍 문자 추출을 다시 눌러 주세요');
+    throw new Error('OCR 엔진을 준비하지 못했습니다. 인터넷 연결을 확인하고 "문자 추출"을 다시 눌러 주세요');
   }
 }
 
@@ -332,25 +351,61 @@ async function runOcr() {
   btnTranslate.disabled = true;
   ocrText.value = '';
   transText.value = '';
-  transStatus.textContent = '';
-  ocrStatus.textContent = '준비 중…';
+  setStatus(transStatus, '');
+  setStatus(ocrStatus, '준비 중…');
   try {
     const lang = ocrLang.value;
     const w = await getWorker(lang);
-    const { data } = await w.recognize(region ? cropRegion(region) : canvas);
+    const data = await recognizeBest(w, region ? cropRegion(region) : canvas, lang);
     const text = extractText(data, lang);
     ocrText.value = text;
-    ocrStatus.textContent = text ? '완료' : '문자를 찾지 못했습니다. 글자 부분을 드래그해 보세요';
+    setStatus(ocrStatus, text ? '완료' : '문자를 찾지 못했습니다. 글자 부분을 드래그해 보세요');
     btnTranslate.disabled = !text;
     if (text && autoRun.checked && !ocrPending) runTranslate();
   } catch (err) {
     console.error(err);
-    ocrStatus.textContent = `오류: ${err.message || err}`;
+    setStatus(ocrStatus, `오류: ${err.message || err}`);
   } finally {
     ocrBusy = false;
     btnOcr.disabled = false;
     if (ocrPending) { ocrPending = false; runOcr(); }
   }
+}
+
+// 사진을 시계 방향으로 degrees(90·180·270)만큼 돌린 새 캔버스
+function rotateCanvas(source, degrees) {
+  const quarter = degrees % 180 !== 0;
+  const out = document.createElement('canvas');
+  out.width = quarter ? source.height : source.width;
+  out.height = quarter ? source.width : source.height;
+  const ctx = out.getContext('2d');
+  ctx.translate(out.width / 2, out.height / 2);
+  ctx.rotate((degrees * Math.PI) / 180);
+  ctx.drawImage(source, -source.width / 2, -source.height / 2);
+  return out;
+}
+
+// 글자가 옆으로 누워 있거나 거꾸로여도 읽도록, 결과가 시원찮으면 사진을 돌려서 다시 인식한다
+const ROTATIONS = [0, 90, 270, 180];
+const GOOD_AVERAGE = 80;
+const GOOD_CHARS = 3;
+
+let passLabel = '';
+
+async function recognizeBest(w, source, lang) {
+  let best = null;
+  for (let i = 0; i < ROTATIONS.length; i++) {
+    const degrees = ROTATIONS[i];
+    passLabel = i === 0 ? '' : `방향 바꿔 재시도 ${i}/${ROTATIONS.length - 1} · `;
+    if (i > 0) setStatus(ocrStatus, `${passLabel}인식 중…`);
+    const { data } = await w.recognize(degrees ? rotateCanvas(source, degrees) : source);
+    const result = scoreResult(data, lang);
+    if (!best || result.score > best.result.score) best = { data, result };
+    if (result.average >= GOOD_AVERAGE && result.chars >= GOOD_CHARS) break;
+    if (ocrPending) break; // 새 요청이 들어왔으면 더 시도하지 않음
+  }
+  passLabel = '';
+  return best.data;
 }
 
 // 선택 영역을 잘라 확대한다. 작은 글자는 크게 키워야 잘 인식됨
@@ -369,23 +424,43 @@ function cropRegion(r) {
   return out;
 }
 
-// 신뢰도가 낮은 줄(아이콘·그림을 글자로 잘못 읽은 것)은 버린다
+// 신뢰도가 낮은 줄(아이콘·그림을 글자로 잘못 읽은 것)은 버린다.
+// 한자·가나는 정상적으로 읽어도 줄 신뢰도가 낮게 나오므로 기준을 낮춘다
 const MIN_LINE_CONFIDENCE = 55;
+const MIN_LINE_CONFIDENCE_CJK = 40;
 
 // 한 글자로도 뜻이 있는 언어 (한자·가나·태국 문자)
-const SINGLE_CHAR_LANGS = ['jpn', 'chi_sim', 'chi_tra', 'tha'];
+const SINGLE_CHAR_LANGS = ['jpn', 'chi_sim', 'chi_tra', 'tha', 'jpn_vert', 'chi_sim_vert', 'chi_tra_vert'];
+
+// 인식 결과에서 쓸 만한 줄만 고른다
+function minConfidenceFor(lang) {
+  return SINGLE_CHAR_LANGS.includes(lang) ? MIN_LINE_CONFIDENCE_CJK : MIN_LINE_CONFIDENCE;
+}
+
+function readLines(data, lang, minConfidence) {
+  const minChars = SINGLE_CHAR_LANGS.includes(lang) ? 1 : 2;
+  return (data.lines || [])
+    .map((l) => ({
+      text: fixCommonErrors(l.text.trim(), lang),
+      confidence: l.confidence,
+      chars: (l.text.match(/[\p{L}\p{N}]/gu) || []).length,
+    }))
+    .filter((l) => l.confidence >= minConfidence && l.chars >= minChars);
+}
 
 function extractText(data, lang) {
-  const lines = data.lines || [];
-  if (!lines.length) return cleanText(data.text || '');
-  const minChars = SINGLE_CHAR_LANGS.includes(lang) ? 1 : 2;
-  const good = (min) => lines
-    .filter((l) => l.confidence >= min
-      && (l.text.match(/[\p{L}\p{N}]/gu) || []).length >= minChars)
-    .map((l) => fixCommonErrors(l.text.trim(), lang));
-  let kept = good(MIN_LINE_CONFIDENCE);
-  if (!kept.length) kept = good(30);
-  return cleanText(kept.join('\n'));
+  if (!(data.lines || []).length) return cleanText(data.text || '');
+  let lines = readLines(data, lang, minConfidenceFor(lang));
+  if (!lines.length) lines = readLines(data, lang, 30);
+  return cleanText(lines.map((l) => l.text).join('\n'));
+}
+
+// 인식이 잘 됐는지 점수 매기기: 읽은 글자 수 × 신뢰도
+function scoreResult(data, lang) {
+  const lines = readLines(data, lang, minConfidenceFor(lang));
+  const chars = lines.reduce((n, l) => n + l.chars, 0);
+  const weighted = lines.reduce((n, l) => n + l.chars * l.confidence, 0);
+  return { chars, score: weighted / 100, average: chars ? weighted / chars : 0 };
 }
 
 // 영어에서 자주 틀리는 글자 보정: 단독으로 쓰인 "|" 는 대문자 I
@@ -485,7 +560,7 @@ async function runTranslate() {
   const run = ++transRun; // 새 번역이 시작되면 이전 번역 결과는 버림
   btnTranslate.disabled = true;
   transText.value = '';
-  transStatus.textContent = '번역 중…';
+  setStatus(transStatus, '번역 중…');
   try {
     let result;
     try {
@@ -496,10 +571,10 @@ async function runTranslate() {
     }
     if (run !== transRun) return;
     transText.value = result;
-    transStatus.textContent = '완료';
+    setStatus(transStatus, '완료');
   } catch (err) {
     console.error(err);
-    if (run === transRun) transStatus.textContent = `오류: ${err.message}`;
+    if (run === transRun) setStatus(transStatus, `오류: ${err.message}`);
   } finally {
     if (run === transRun) btnTranslate.disabled = false;
   }
@@ -511,7 +586,7 @@ $('btn-copy').addEventListener('click', async () => {
   if (!transText.value) return;
   try {
     await navigator.clipboard.writeText(transText.value);
-    transStatus.textContent = '복사됨';
+    setStatus(transStatus, '복사됨');
   } catch {
     transText.select();
     document.execCommand('copy');
