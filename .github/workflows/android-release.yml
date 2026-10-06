@@ -55,7 +55,7 @@ jobs:
             PASS="$(openssl rand -hex 16)"
             echo "::add-mask::$PASS"
             keytool -genkeypair -v -keystore "$KS" -alias pictrans -keyalg RSA -keysize 2048 \
-              -validity 10000 -storepass "$PASS" -keypass "$PASS" -dname "CN=Pic Trans"
+              -validity 10000 -storepass "$PASS" -keypass "$PASS" -dname "CN=Snap Read"
             echo "ANDROID_KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
             echo "ANDROID_KEY_ALIAS=pictrans" >> "$GITHUB_ENV"
             echo "ANDROID_KEY_PASSWORD=$PASS" >> "$GITHUB_ENV"
@@ -85,13 +85,13 @@ jobs:
       - name: Collect outputs
         run: |
           mkdir -p dist
-          cp android/app/build/outputs/apk/release/app-release.apk "dist/PicTrans-${VERSION_NAME}.apk"
-          cp android/app/build/outputs/bundle/release/app-release.aab "dist/PicTrans-${VERSION_NAME}.aab"
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/SnapRead-${VERSION_NAME}.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "dist/SnapRead-${VERSION_NAME}.aab"
           ls -l dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: pictrans-android
+          name: snapread-android
           path: dist/*
 
       - name: Publish GitHub Release
@@ -99,13 +99,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION_NAME }}
-          name: Pic Trans v${{ env.VERSION_NAME }}
+          name: Snap Read v${{ env.VERSION_NAME }}
           target_commitish: ${{ github.sha }}
           files: dist/*
           body: |
-            Pic Trans 안드로이드 앱 ${{ env.VERSION_NAME }}
+            Snap Read 안드로이드 앱 ${{ env.VERSION_NAME }}
 
-            - **PicTrans-${{ env.VERSION_NAME }}.apk** : 휴대폰에 바로 설치 (출처를 알 수 없는 앱 설치 허용 필요)
-            - **PicTrans-${{ env.VERSION_NAME }}.aab** : Google Play Console 업로드용
+            - **SnapRead-${{ env.VERSION_NAME }}.apk** : 휴대폰에 바로 설치 (출처를 알 수 없는 앱 설치 허용 필요)
+            - **SnapRead-${{ env.VERSION_NAME }}.aab** : Google Play Console 업로드용
 
             ${{ env.SIGNING_NOTE }}
