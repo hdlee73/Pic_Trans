@@ -334,3 +334,27 @@ select {
   .block header, .block footer { padding: 8px 14px; }
   textarea { padding: 0 14px 10px; }
 }
+
+/* ---------- 앱 정보 ---------- */
+.info-btn { position: absolute; top: calc(var(--safe-top) + 10px); right: calc(var(--safe-right) + 10px); z-index: 5; }
+.info-btn .dot {
+  position: absolute; top: 6px; right: 6px; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--danger); border: 1.5px solid #fff;
+}
+.overlay {
+  position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--safe-top) + 16px) calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 16px);
+  background: rgba(0, 0, 0, .5);
+}
+.sheet {
+  width: min(100%, 380px); max-height: 100%; overflow: auto; padding: 22px;
+  background: var(--surface); color: var(--text); border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.sheet h2 { margin: 0 0 14px; font-size: 20px; }
+.info-list { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; margin: 0 0 18px; font-size: 14px; }
+.info-list dt { color: var(--muted); }
+.info-list dd { margin: 0; word-break: break-all; }
+.info-list a { color: var(--accent); }
+.update-line.available { color: var(--danger); font-weight: 600; }
+.sheet-actions { display: flex; flex-direction: column; gap: 8px; }
+.sheet-actions .btn { justify-content: center; text-decoration: none; }
