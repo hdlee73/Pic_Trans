@@ -725,6 +725,114 @@ $('btn-copy').addEventListener('click', async () => {
   }
 });
 
+/* ---------- 앱 정보 · 업데이트 확인 ---------- */
+
+const REPO = 'hdlee73/SnapRead';
+const RELEASES_URL = `https://github.com/${REPO}/releases`;
+const CHECK_INTERVAL = 6 * 60 * 60 * 1000; // 자동 확인은 6시간에 한 번만
+const cap = window.Capacitor;
+const plugins = cap?.Plugins || {};
+let currentVersion = null;
+let latest = null; // { version, url } — 새 버전이 있을 때만
+
+// "1.2.3" 형태만 비교. 숫자가 아닌 부분은 무시
+function parseVersion(v) {
+  return String(v || '').replace(/^v/i, '').split('-')[0].split('.').map((n) => parseInt(n, 10) || 0);
+}
+function isNewer(a, b) {
+  const x = parseVersion(a), y = parseVersion(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) return d > 0;
+  }
+  return false;
+}
+
+async function loadCurrentVersion() {
+  try {
+    if (plugins.App?.getInfo) currentVersion = (await plugins.App.getInfo()).version;
+  } catch (err) { console.warn('버전을 읽지 못함', err); }
+  $('info-version').textContent = currentVersion || '웹 버전';
+}
+
+function renderUpdate(state) {
+  const el = $('info-update');
+  el.classList.toggle('available', state === 'available');
+  $('info-dot').hidden = state !== 'available';
+  if (state === 'available') {
+    el.textContent = `새 버전 ${latest.version}이(가) 있습니다. 아래 릴리스 페이지에서 받으세요.`;
+    $('info-release').href = latest.url;
+  } else if (state === 'latest') {
+    el.textContent = '최신 버전입니다.';
+  } else if (state === 'checking') {
+    el.textContent = '확인 중…';
+  } else {
+    el.textContent = '확인하지 못했습니다. 인터넷 연결을 확인하세요.';
+  }
+}
+
+async function fetchLatestRelease() {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const rel = await res.json();
+  return { version: String(rel.tag_name || '').replace(/^v/i, ''), url: rel.html_url || RELEASES_URL };
+}
+
+async function notifyUpdate() {
+  const LN = plugins.LocalNotifications;
+  if (!LN || store.get('notifiedVersion') === latest.version) return;
+  try {
+    let perm = await LN.checkPermissions();
+    if (perm.display === 'prompt' || perm.display === 'prompt-with-rationale') perm = await LN.requestPermissions();
+    if (perm.display !== 'granted') return;
+    await LN.schedule({ notifications: [{
+      id: 1,
+      title: 'Snap Read 업데이트',
+      body: `새 버전 ${latest.version}이(가) 나왔습니다. 눌러서 받으세요.`,
+      extra: { url: latest.url },
+    }] });
+    store.set('notifiedVersion', latest.version); // 같은 버전은 한 번만 알림
+  } catch (err) { console.warn('알림을 보내지 못함', err); }
+}
+
+async function checkUpdate({ manual = false } = {}) {
+  if (!currentVersion) { $('info-update').textContent = '앱에서만 업데이트를 확인합니다.'; return; }
+  if (!manual) {
+    const last = Number(store.get('lastUpdateCheck')) || 0;
+    if (Date.now() - last < CHECK_INTERVAL) {
+      latest = (() => { try { return JSON.parse(store.get('latestRelease')); } catch { return null; } })();
+      if (latest && !isNewer(latest.version, currentVersion)) latest = null;
+      renderUpdate(latest ? 'available' : 'latest');
+      return;
+    }
+  }
+  renderUpdate('checking');
+  try {
+    const rel = await fetchLatestRelease();
+    store.set('lastUpdateCheck', String(Date.now()));
+    store.set('latestRelease', JSON.stringify(rel));
+    latest = isNewer(rel.version, currentVersion) ? rel : null;
+    renderUpdate(latest ? 'available' : 'latest');
+    if (latest) notifyUpdate();
+  } catch (err) {
+    console.warn('업데이트 확인 실패', err);
+    renderUpdate('error');
+  }
+}
+
+const infoOverlay = $('info-overlay');
+$('btn-info').addEventListener('click', () => { infoOverlay.hidden = false; });
+$('info-close').addEventListener('click', () => { infoOverlay.hidden = true; });
+infoOverlay.addEventListener('click', (e) => { if (e.target === infoOverlay) infoOverlay.hidden = true; });
+$('info-recheck').addEventListener('click', () => checkUpdate({ manual: true }));
+
+// 알림을 누르면 릴리스 페이지로 이동
+plugins.LocalNotifications?.addListener?.('localNotificationActionPerformed', (e) => {
+  window.open(e.notification?.extra?.url || RELEASES_URL, '_blank');
+});
+
+loadCurrentVersion().then(() => checkUpdate());
+
 /* ---------- 시작 ---------- */
 
 setMode('camera');

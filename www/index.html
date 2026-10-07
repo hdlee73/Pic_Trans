@@ -23,6 +23,7 @@
       <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
       <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15M8 10h8M8 14h5"/></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
     </defs>
   </svg>
 
@@ -33,6 +34,9 @@
         <video id="video" autoplay playsinline muted></video>
         <canvas id="canvas" hidden></canvas>
         <div id="selection" class="selection" hidden></div>
+        <button id="btn-info" class="icon-btn info-btn" title="앱 정보" aria-label="앱 정보">
+          <svg class="ic"><use href="#i-info"/></svg><span id="info-dot" class="dot" hidden></span>
+        </button>
         <p id="camera-msg" class="placeholder">카메라를 시작하는 중…</p>
         <p id="photo-hint" class="hint" hidden>두 손가락으로 확대 · 글자 부분을 드래그하면 그 부분만 인식합니다</p>
       </div>
@@ -101,6 +105,23 @@
       </section>
     </div>
   </main>
+
+  <!-- 앱 정보 -->
+  <div id="info-overlay" class="overlay" hidden>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="info-title">
+      <h2 id="info-title">Snap Read</h2>
+      <dl class="info-list">
+        <dt>버전</dt><dd id="info-version">-</dd>
+        <dt>만든이</dt><dd>이현덕 · <a href="mailto:hdlee73@gmail.com">hdlee73@gmail.com</a></dd>
+        <dt>업데이트</dt><dd id="info-update" class="update-line">확인 중…</dd>
+      </dl>
+      <div class="sheet-actions">
+        <a id="info-release" class="btn primary" href="https://github.com/hdlee73/SnapRead/releases" target="_blank" rel="noopener">GitHub 릴리스 페이지</a>
+        <button id="info-recheck" class="btn" type="button">업데이트 확인</button>
+        <button id="info-close" class="btn" type="button">닫기</button>
+      </div>
+    </section>
+  </div>
 
   <script src="app.js"></script>
 </body>
