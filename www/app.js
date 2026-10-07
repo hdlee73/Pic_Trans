@@ -12,7 +12,8 @@ const transText = $('trans-text');
 const ocrStatus = $('ocr-status');
 const transStatus = $('trans-status');
 const ocrLang = $('ocr-lang');
-const btnOcr = $('btn-ocr');
+const media = $('media');
+const popup = $('popup');
 const btnFull = $('btn-full');
 const btnTranslate = $('btn-translate');
 const autoRun = $('auto-run');
@@ -58,6 +59,7 @@ function setMode(mode) {
   video.hidden = photo;
   canvas.hidden = !photo;
   photoHint.hidden = !photo;
+  if (!photo) closePopup();
   $('camera-controls').hidden = photo;
   $('photo-controls').hidden = !photo;
   if (photo) {
@@ -65,6 +67,7 @@ function setMode(mode) {
     cameraMsg.hidden = true;
   } else {
     clearRegion();
+    resetView();
     startCamera();
   }
 }
@@ -119,7 +122,11 @@ $('btn-capture').addEventListener('click', () => {
     alert('카메라가 준비되지 않았습니다.');
     return;
   }
-  drawToCanvas(video, video.videoWidth, video.videoHeight);
+  // 화면에 보이는 부분(꽉 채움)만 사진으로 저장
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const k = Math.max(video.clientWidth / vw, video.clientHeight / vh);
+  const sw = Math.min(vw, video.clientWidth / k), sh = Math.min(vh, video.clientHeight / k);
+  drawToCanvas(video, sw, sh, { x: (vw - sw) / 2, y: (vh - sh) / 2 });
 });
 
 $('file-input').addEventListener('change', (e) => {
@@ -143,21 +150,24 @@ $('btn-rotate').addEventListener('click', () => {
   canvas.width = rotated.width;
   canvas.height = rotated.height;
   canvas.getContext('2d').drawImage(rotated, 0, 0);
+  lastTranslated = null;
   clearRegion();
+  resetView();
   if (autoRun.checked) runOcr();
 });
 
 /* ---------- 찍은 사진 ---------- */
 
-function drawToCanvas(source, w, h) {
+function drawToCanvas(source, w, h, crop = { x: 0, y: 0 }) {
   const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
-  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  canvas.getContext('2d').drawImage(source, crop.x, crop.y, w, h, 0, 0, canvas.width, canvas.height);
   hasPhoto = true;
+  lastTranslated = null;
   clearRegion();
+  resetView();
   setMode('photo');
-  btnOcr.disabled = false;
   if (autoRun.checked) runOcr();
 }
 
@@ -182,12 +192,13 @@ function toImage(e, box) {
 function showSelection(rect) {
   if (!rect) { selection.hidden = true; return; }
   const box = imageBox();
-  const parent = selection.parentElement.getBoundingClientRect();
+  const parent = zoomer.getBoundingClientRect();
+  const k = box.scale / view.scale; // 확대된 상태의 화면 좌표 → 확대 전 좌표
   selection.hidden = false;
-  selection.style.left = `${box.left - parent.left + rect.left * box.scale}px`;
-  selection.style.top = `${box.top - parent.top + rect.top * box.scale}px`;
-  selection.style.width = `${rect.width * box.scale}px`;
-  selection.style.height = `${rect.height * box.scale}px`;
+  selection.style.left = `${(box.left - parent.left) / view.scale + rect.left * k}px`;
+  selection.style.top = `${(box.top - parent.top) / view.scale + rect.top * k}px`;
+  selection.style.width = `${rect.width * k}px`;
+  selection.style.height = `${rect.height * k}px`;
 }
 
 function clearRegion() {
@@ -196,16 +207,98 @@ function clearRegion() {
   btnFull.hidden = true;
 }
 
+/* ---------- 사진 확대·이동 ---------- */
+
+// 사진과 선택 영역을 함께 확대하기 위해 한 덩어리로 묶는다
+const zoomer = document.createElement('div');
+zoomer.className = 'zoomer';
+canvas.before(zoomer);
+zoomer.append(canvas, selection);
+
+const MAX_ZOOM = 8;
+const view = { scale: 1, x: 0, y: 0 };
+
+function applyView() {
+  const r = media.getBoundingClientRect();
+  view.scale = Math.max(1, Math.min(MAX_ZOOM, view.scale));
+  // 사진이 화면 밖으로 벗어나지 않게
+  view.x = Math.min(0, Math.max(r.width * (1 - view.scale), view.x));
+  view.y = Math.min(0, Math.max(r.height * (1 - view.scale), view.y));
+  zoomer.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+  zoomer.style.setProperty('--z', view.scale);
+}
+
+function resetView() {
+  view.scale = 1; view.x = 0; view.y = 0;
+  applyView();
+}
+
+// (cx, cy: 화면 좌표) 지점이 제자리에 있도록 scale 로 확대·축소
+function zoomAt(cx, cy, scale, from = view) {
+  const r = media.getBoundingClientRect();
+  const next = Math.max(1, Math.min(MAX_ZOOM, scale));
+  const px = (cx - r.left - from.x) / from.scale;
+  const py = (cy - r.top - from.y) / from.scale;
+  view.scale = next;
+  view.x = cx - r.left - px * next;
+  view.y = cy - r.top - py * next;
+  applyView();
+}
+
+media.addEventListener('wheel', (e) => {
+  if (!hasPhoto || !document.body.classList.contains('mode-photo')) return;
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, view.scale * Math.exp(-e.deltaY * 0.002));
+}, { passive: false });
+
+/* ---------- 인식 영역 선택 (한 손가락 드래그) · 확대 (두 손가락) ---------- */
+
 let drag = null;
+const pointers = new Map();
+let pinch = null;
+let gestureActive = false; // 두 손가락을 쓴 동안에는 남은 손가락이 영역 선택을 시작하지 않게
+let lastTap = 0;
+
+function pinchState() {
+  const [a, b] = [...pointers.values()];
+  return {
+    dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+    cx: (a.x + b.x) / 2,
+    cy: (a.y + b.y) / 2,
+  };
+}
 
 canvas.addEventListener('pointerdown', (e) => {
   if (!hasPhoto) return;
   canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size >= 2) {
+    // 두 번째 손가락: 영역 선택을 취소하고 확대 시작
+    drag = null;
+    showSelection(region);
+    gestureActive = true;
+    pinch = { ...pinchState(), from: { ...view } };
+    return;
+  }
+  if (gestureActive) return;
   const box = imageBox();
   drag = { box, start: toImage(e, box), rect: null };
 });
 
 canvas.addEventListener('pointermove', (e) => {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pointers.size >= 2) {
+    const now = pinchState();
+    const r = media.getBoundingClientRect();
+    // 처음 두 손가락 가운데 지점의 사진 위치가 지금 가운데 지점에 오도록
+    const px = (pinch.cx - r.left - pinch.from.x) / pinch.from.scale;
+    const py = (pinch.cy - r.top - pinch.from.y) / pinch.from.scale;
+    view.scale = Math.max(1, Math.min(MAX_ZOOM, pinch.from.scale * now.dist / pinch.dist));
+    view.x = now.cx - r.left - px * view.scale;
+    view.y = now.cy - r.top - py * view.scale;
+    applyView();
+    return;
+  }
   if (!drag) return;
   const p = toImage(e, drag.box);
   const s = drag.start;
@@ -218,13 +311,23 @@ canvas.addEventListener('pointermove', (e) => {
   showSelection(drag.rect);
 });
 
-function endDrag() {
+function endDrag(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (!pointers.size) gestureActive = false;
   if (!drag) return;
   const { rect, box } = drag;
   drag = null;
   // 화면에서 20px 보다 작은 드래그는 단순 터치로 보고 무시
   if (!rect || rect.width * box.scale < 20 || rect.height * box.scale < 20) {
     showSelection(region);
+    // 빠르게 두 번 누르면 확대 ↔ 원래 크기
+    if (e.type === 'pointerup' && Date.now() - lastTap < 300) {
+      lastTap = 0;
+      if (view.scale > 1) resetView(); else zoomAt(e.clientX, e.clientY, 2.5);
+    } else {
+      lastTap = Date.now();
+    }
     return;
   }
   region = rect;
@@ -242,7 +345,7 @@ btnFull.addEventListener('click', () => {
 });
 
 // 접기·펼치기·회전으로 화면 크기가 바뀌면 선택 영역 표시 위치를 다시 계산
-window.addEventListener('resize', () => showSelection(region));
+window.addEventListener('resize', () => { applyView(); showSelection(region); });
 
 /* ---------- 문자 추출 (OCR) ---------- */
 
@@ -313,7 +416,7 @@ async function createOcrWorker(lang) {
     return await startWorker(lang, false);
   } catch (err) {
     console.error(err);
-    throw new Error('OCR 엔진을 준비하지 못했습니다. 인터넷 연결을 확인하고 "문자 추출"을 다시 눌러 주세요');
+    throw new Error('OCR 엔진을 준비하지 못했습니다. 인터넷 연결을 확인하고 "번역"을 다시 눌러 주세요');
   }
 }
 
@@ -339,6 +442,7 @@ function getWorker(lang) {
   return workerChain;
 }
 
+let wantTranslate = false; // 번역 버튼을 눌러서 결과를 기다리는 중
 let ocrBusy = false;
 let ocrPending = false;
 
@@ -347,7 +451,6 @@ async function runOcr() {
   // 인식 중에 새 사진·영역·언어 변경이 들어오면 끝난 뒤 다시 실행
   if (ocrBusy) { ocrPending = true; return; }
   ocrBusy = true;
-  btnOcr.disabled = true;
   btnTranslate.disabled = true;
   ocrText.value = '';
   transText.value = '';
@@ -361,13 +464,13 @@ async function runOcr() {
     ocrText.value = text;
     setStatus(ocrStatus, text ? '완료' : '문자를 찾지 못했습니다. 글자 부분을 드래그해 보세요');
     btnTranslate.disabled = !text;
-    if (text && autoRun.checked && !ocrPending) runTranslate();
+    // 번역 버튼을 눌러 기다리는 중이었다면 이어서 번역
+    if (text && wantTranslate && !ocrPending) runTranslate();
   } catch (err) {
     console.error(err);
     setStatus(ocrStatus, `오류: ${err.message || err}`);
   } finally {
     ocrBusy = false;
-    btnOcr.disabled = false;
     if (ocrPending) { ocrPending = false; runOcr(); }
   }
 }
@@ -478,7 +581,6 @@ function cleanText(text) {
     .trim();
 }
 
-btnOcr.addEventListener('click', runOcr);
 
 const savedLang = store.get('ocrLang');
 if (savedLang && LANG_MAP[savedLang]) ocrLang.value = savedLang;
@@ -553,6 +655,7 @@ async function translateMyMemory(text, source) {
 }
 
 let transRun = 0;
+let lastTranslated = null; // 마지막으로 번역한 원문
 
 async function runTranslate() {
   const text = ocrText.value.trim();
@@ -560,6 +663,8 @@ async function runTranslate() {
   const run = ++transRun; // 새 번역이 시작되면 이전 번역 결과는 버림
   btnTranslate.disabled = true;
   transText.value = '';
+  lastTranslated = null;
+  wantTranslate = false;
   setStatus(transStatus, '번역 중…');
   try {
     let result;
@@ -571,6 +676,7 @@ async function runTranslate() {
     }
     if (run !== transRun) return;
     transText.value = result;
+    lastTranslated = text;
     setStatus(transStatus, '완료');
   } catch (err) {
     console.error(err);
@@ -581,6 +687,32 @@ async function runTranslate() {
 }
 
 btnTranslate.addEventListener('click', runTranslate);
+
+/* ---------- 번역 결과 팝업 ---------- */
+
+function closePopup() {
+  popup.hidden = true;
+  wantTranslate = false;
+}
+
+// 번역 버튼: 팝업을 열고, 아직 추출·번역 전이면 이어서 진행
+$('btn-open-result').addEventListener('click', () => {
+  if (!hasPhoto) return;
+  popup.hidden = false;
+  const text = ocrText.value.trim();
+  if (ocrBusy) {
+    wantTranslate = true; // 인식이 끝나면 바로 번역
+  } else if (!text) {
+    wantTranslate = true;
+    runOcr();
+  } else if (lastTranslated !== text) {
+    runTranslate();
+  }
+});
+
+$('btn-close-result').addEventListener('click', closePopup);
+popup.addEventListener('click', (e) => { if (e.target === popup) closePopup(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !popup.hidden) closePopup(); });
 
 $('btn-copy').addEventListener('click', async () => {
   if (!transText.value) return;
