@@ -436,3 +436,15 @@ select {
   padding: 4px 6px 4px 12px; border-radius: 999px; background: rgba(16, 18, 22, .75); color: #fff; font-size: 13px;
 }
 .live-bar .btn, .live-bar select { height: 30px; font-size: 12px; padding: 0 10px; border-radius: 999px; }
+
+/* 첫 화면 메뉴 */
+.home { display: none; }
+body.mode-home .app { display: none; }
+body.mode-home .home {
+  display: block; min-height: 100dvh; box-sizing: border-box; position: relative;
+  padding: calc(var(--safe-top) + 56px) calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 16px);
+  max-width: 560px; margin: 0 auto;
+}
+.home h1 { margin: 0 0 4px; font-size: 22px; }
+.home .status { margin: 0 0 16px; }
+.home .info-btn { position: absolute; top: calc(var(--safe-top) + 10px); right: calc(var(--safe-right) + 10px); }
