@@ -59,7 +59,7 @@ function setMode(mode) {
   video.hidden = photo;
   canvas.hidden = !photo;
   photoHint.hidden = !photo;
-  if (!photo) closePopup();
+  if (!photo) { closePopup(); scanOverlay.hidden = true; }
   $('camera-controls').hidden = photo;
   $('photo-controls').hidden = !photo;
   if (photo) {
@@ -712,7 +712,11 @@ $('btn-open-result').addEventListener('click', () => {
 
 $('btn-close-result').addEventListener('click', closePopup);
 popup.addEventListener('click', (e) => { if (e.target === popup) closePopup(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !popup.hidden) closePopup(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!scanOverlay.hidden) scanOverlay.hidden = true;
+  else if (!popup.hidden) closePopup();
+});
 
 $('btn-copy').addEventListener('click', async () => {
   if (!transText.value) return;
@@ -722,6 +726,228 @@ $('btn-copy').addEventListener('click', async () => {
   } catch {
     transText.select();
     document.execCommand('copy');
+  }
+});
+
+/* ---------- 스캔 저장 (PDF / 이미지) ---------- */
+
+const scanOverlay = $('scan-overlay');
+const scanPreview = $('scan-preview');
+const scanStatus = $('scan-status');
+
+// 선택 영역이 있으면 그 부분만, 없으면 사진 전체
+function sourceCanvas() {
+  if (!region) return canvas;
+  const out = document.createElement('canvas');
+  out.width = region.width;
+  out.height = region.height;
+  out.getContext('2d').drawImage(canvas, region.left, region.top, region.width, region.height, 0, 0, region.width, region.height);
+  return out;
+}
+
+// 문서처럼 보이도록 보정. gray: 흑백 톤, bw: 주변 밝기와 비교해 글자만 검게 (그림자에 강함)
+function applyScanFilter(src, filter) {
+  if (filter === 'color') return src;
+  const w = src.width, h = src.height;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(src, 0, 0);
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  const gray = new Uint8ClampedArray(w * h);
+  for (let i = 0, j = 0; j < gray.length; i += 4, j++) {
+    gray[j] = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000;
+  }
+  if (filter === 'gray') {
+    for (let i = 0, j = 0; j < gray.length; i += 4, j++) d[i] = d[i + 1] = d[i + 2] = gray[j];
+  } else {
+    // 적분 이미지로 주변 평균 밝기를 빠르게 계산
+    const iw = w + 1;
+    const sum = new Float64Array(iw * (h + 1));
+    for (let y = 0; y < h; y++) {
+      let row = 0;
+      for (let x = 0; x < w; x++) {
+        row += gray[y * w + x];
+        sum[(y + 1) * iw + x + 1] = sum[y * iw + x + 1] + row;
+      }
+    }
+    const r = Math.max(8, Math.round(Math.min(w, h) / 24));
+    for (let y = 0; y < h; y++) {
+      const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+      for (let x = 0; x < w; x++) {
+        const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
+        const total = sum[y1 * iw + x1] - sum[y0 * iw + x1] - sum[y1 * iw + x0] + sum[y0 * iw + x0];
+        const mean = total / ((x1 - x0) * (y1 - y0));
+        const v = gray[y * w + x] < mean * 0.9 ? 0 : 255;
+        const i = (y * w + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return out;
+}
+
+function canvasToJpeg(c, quality = 0.9) {
+  return new Promise((resolve, reject) => {
+    c.toBlob(async (blob) => {
+      if (!blob) { reject(new Error('이미지를 만들지 못했습니다')); return; }
+      resolve(new Uint8Array(await blob.arrayBuffer()));
+    }, 'image/jpeg', quality);
+  });
+}
+
+// JPEG 한 장을 한 페이지짜리 PDF로 감싼다 (외부 라이브러리 없이)
+function makePdf(jpeg, w, h) {
+  const enc = new TextEncoder();
+  const pageW = 595; // A4 가로(pt). 세로는 사진 비율에 맞춤
+  const pageH = Math.round(pageW * h / w);
+  const content = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q`;
+  const parts = [];
+  const offsets = [];
+  let length = 0;
+  const push = (chunk) => {
+    const bytes = typeof chunk === 'string' ? enc.encode(chunk) : chunk;
+    parts.push(bytes);
+    length += bytes.length;
+  };
+  push('%PDF-1.4\n');
+  const object = (n, head, stream) => {
+    offsets[n] = length;
+    push(`${n} 0 obj\n${head}\n`);
+    if (stream) { push('stream\n'); push(stream); push('\nendstream\n'); }
+    push('endobj\n');
+  };
+  object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  object(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  object(4, `<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>`, jpeg);
+  object(5, `<< /Length ${content.length} >>`, content);
+  const xref = length;
+  push(`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`);
+  push(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const out = new Uint8Array(length);
+  let pos = 0;
+  for (const p of parts) { out.set(p, pos); pos += p.length; }
+  return out;
+}
+
+function toBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+function timestampName(ext) {
+  const t = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `SnapRead_${t.getFullYear()}${p(t.getMonth() + 1)}${p(t.getDate())}_${p(t.getHours())}${p(t.getMinutes())}${p(t.getSeconds())}.${ext}`;
+}
+
+// 앱: 임시 파일로 만든 뒤 공유 창을 띄움 (파일 앱·드라이브에 저장하거나 다른 앱으로 보낼 수 있음)
+// 웹: 파일로 내려받음
+async function saveOrShare(bytes, filename, mime, dialogTitle) {
+  const { Filesystem, Share } = plugins;
+  if (Filesystem && Share) {
+    const file = await Filesystem.writeFile({ path: filename, data: toBase64(bytes), directory: 'CACHE' });
+    await Share.share({ title: dialogTitle, files: [file.uri], dialogTitle });
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+function scanChoice(name) {
+  return document.querySelector(`input[name="${name}"]:checked`).value;
+}
+
+function renderScanPreview() {
+  const src = sourceCanvas();
+  const k = Math.min(1, 900 / Math.max(src.width, src.height));
+  const small = document.createElement('canvas');
+  small.width = Math.max(1, Math.round(src.width * k));
+  small.height = Math.max(1, Math.round(src.height * k));
+  small.getContext('2d').drawImage(src, 0, 0, small.width, small.height);
+  const shown = applyScanFilter(small, scanChoice('scan-filter'));
+  scanPreview.width = shown.width;
+  scanPreview.height = shown.height;
+  scanPreview.getContext('2d').drawImage(shown, 0, 0);
+}
+
+$('btn-scan').addEventListener('click', () => {
+  if (!hasPhoto) return;
+  $('scan-scope').textContent = region ? '선택한 부분만 저장합니다' : '사진 전체를 저장합니다 (일부만 저장하려면 글자 부분을 드래그하세요)';
+  setStatus(scanStatus, '');
+  scanOverlay.hidden = false;
+  renderScanPreview();
+});
+document.querySelectorAll('input[name="scan-filter"]').forEach((el) => el.addEventListener('change', renderScanPreview));
+$('scan-close').addEventListener('click', () => { scanOverlay.hidden = true; });
+scanOverlay.addEventListener('click', (e) => { if (e.target === scanOverlay) scanOverlay.hidden = true; });
+
+$('scan-save').addEventListener('click', async () => {
+  const btn = $('scan-save');
+  btn.disabled = true;
+  setStatus(scanStatus, '만드는 중…');
+  try {
+    const out = applyScanFilter(sourceCanvas(), scanChoice('scan-filter'));
+    const jpeg = await canvasToJpeg(out);
+    if (scanChoice('scan-format') === 'pdf') {
+      await saveOrShare(makePdf(jpeg, out.width, out.height), timestampName('pdf'), 'application/pdf', '스캔 PDF 저장');
+    } else {
+      await saveOrShare(jpeg, timestampName('jpg'), 'image/jpeg', '스캔 이미지 저장');
+    }
+    setStatus(scanStatus, '완료');
+  } catch (err) {
+    // 공유 창을 그냥 닫은 경우는 오류로 보지 않음
+    if (/cancel/i.test(String(err?.message || err))) setStatus(scanStatus, '');
+    else { console.error(err); setStatus(scanStatus, `오류: ${err.message || err}`); }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---------- 구글 이미지 검색 ---------- */
+
+// 별도 서버·키 없이: 앱에서는 공유 창으로 구글 앱/렌즈에 이미지를 넘기고,
+// 브라우저에서는 구글 렌즈 업로드 주소로 바로 보낸다
+$('btn-search').addEventListener('click', async () => {
+  if (!hasPhoto) return;
+  const btn = $('btn-search');
+  btn.disabled = true;
+  try {
+    const jpeg = await canvasToJpeg(sourceCanvas(), 0.9);
+    if (plugins.Filesystem && plugins.Share) {
+      await saveOrShare(jpeg, timestampName('jpg'), 'image/jpeg', '구글 렌즈 · 구글 앱을 골라 이미지 검색');
+    } else {
+      const file = new File([jpeg], timestampName('jpg'), { type: 'image/jpeg' });
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.enctype = 'multipart/form-data';
+      form.target = '_blank';
+      form.action = 'https://lens.google.com/v3/upload?hl=ko';
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.name = 'encoded_image';
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      form.append(input);
+      document.body.append(form);
+      form.submit();
+      form.remove();
+    }
+  } catch (err) {
+    if (!/cancel/i.test(String(err?.message || err))) { console.error(err); alert(`이미지 검색을 열지 못했습니다: ${err.message || err}`); }
+  } finally {
+    btn.disabled = false;
   }
 });
 
