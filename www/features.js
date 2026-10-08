@@ -1,6 +1,6 @@
 'use strict';
 
-/* 카메라 활용 기능: 영수증 · 명함 · 표(CSV) · 단어장 · QR/바코드 · 실시간 번역
+/* 카메라 활용 기능: 명함 · 표(CSV) · 단어장 · QR/바코드 · 실시간 번역
  * app.js 의 전역(canvas, region, sourceCanvas, runOcr, saveOrShare …)을 그대로 쓴다. */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -14,8 +14,6 @@ const db = {
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const won = (n) => `${Math.round(n).toLocaleString('ko-KR')}원`;
-const today = () => new Date().toISOString().slice(0, 10);
 
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); } catch { /* 복사 권한이 없으면 건너뜀 */ }
@@ -23,7 +21,6 @@ async function copyText(text) {
 
 /* ---------- 공용 시트 ---------- */
 
-const menuOverlay = $('menu-overlay');
 const formOverlay = $('form-overlay');
 const formStatus = $('form-status');
 
@@ -76,7 +73,6 @@ async function ensureText() {
 }
 
 async function needText(title) {
-  menuOverlay.hidden = true;
   openForm(title, [], [{ label: '닫기' }], '<p class="status">글자를 읽는 중…</p>');
   const text = await ensureText();
   if (!text) {
@@ -86,66 +82,40 @@ async function needText(title) {
   return text;
 }
 
-/* ---------- 기능 메뉴 ---------- */
+/* ---------- 첫 화면 메뉴 ---------- */
 
-$('btn-menu').addEventListener('click', () => {
-  const camera = inCameraMode();
-  menuOverlay.querySelectorAll('.menu-item').forEach((el) => {
-    const needs = el.dataset.needs;
-    el.disabled = (needs === 'photo' && (camera || !hasPhoto)) || (needs === 'camera' && !camera);
-  });
-  $('menu-note').textContent = camera ? '회색 기능은 사진을 찍은 뒤 쓸 수 있습니다' : '회색 기능은 카메라 화면에서 쓸 수 있습니다';
-  menuOverlay.hidden = false;
-});
-$('menu-close').addEventListener('click', () => { menuOverlay.hidden = true; });
-menuOverlay.addEventListener('click', (e) => { if (e.target === menuOverlay) menuOverlay.hidden = true; });
+// 메뉴에서 고른 기능. 촬영 화면으로 가서, 사진을 찍으면 바로 이어서 실행한다
+let pendingAct = null;
+const LIVE_ACTS = { ar: () => startLive('ar'), qr: () => startLive('qr') };
+const PHOTO_ACTS = {
+  translate: () => $('btn-open-result').click(),
+  scan: () => $('btn-scan').click(),
+  search: () => $('btn-search').click(),
+  card: openCard, table: openTable, vocab: openVocab,
+};
 
-const ACTIONS = { receipt: openReceipt, card: openCard, table: openTable, vocab: openVocab, qr: () => startLive('qr'), ar: () => startLive('ar'), library: () => showLibrary() };
-menuOverlay.querySelectorAll('.menu-item').forEach((el) => el.addEventListener('click', () => {
-  menuOverlay.hidden = true;
-  ACTIONS[el.dataset.act]?.();
+function goHome() {
+  pendingAct = null;
+  hasPhoto = false;
+  stopLive();
+  formOverlay.hidden = true;
+  setMode('home');
+}
+$('btn-menu').addEventListener('click', goHome);
+
+// 사진이 찍히면(또는 골라지면) 메뉴에서 고른 기능을 이어서 실행
+function onPhotoReady() {
+  const act = PHOTO_ACTS[pendingAct];
+  if (act) setTimeout(act, 0);
+}
+
+document.querySelectorAll('#home .menu-item').forEach((el) => el.addEventListener('click', () => {
+  const act = el.dataset.act;
+  if (act === 'library') { showLibrary(); return; }
+  pendingAct = act;
+  setMode('camera');
+  if (LIVE_ACTS[act]) setTimeout(LIVE_ACTS[act], 0);
 }));
-
-/* ---------- 영수증 가계부 ---------- */
-
-const AMOUNT = /\d{1,3}(?:,\d{3})+|\d{3,}/g;
-const TOTAL_WORDS = /합\s*계|총\s*액|총\s*금\s*액|결제\s*금액|받을\s*금액|청구\s*금액|total|amount\s*due|grand/i;
-const pad2 = (n) => String(n).padStart(2, '0');
-
-function parseDate(text) {
-  let m = text.match(/(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/);
-  if (!m) m = text.match(/\b(\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})\b/);
-  if (!m) return '';
-  const y = m[1].length === 2 ? `20${m[1]}` : m[1];
-  const mo = +m[2], d = +m[3];
-  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? `${y}-${pad2(mo)}-${pad2(d)}` : '';
-}
-
-function parseReceipt(text) {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const amounts = (s) => (s.match(AMOUNT) || []).map((n) => parseInt(n.replace(/,/g, ''), 10)).filter((n) => n >= 100);
-  let total = 0;
-  for (const l of lines) if (TOTAL_WORDS.test(l)) total = Math.max(total, ...amounts(l), 0);
-  if (!total) total = Math.max(0, ...lines.flatMap(amounts));
-  const store = lines.find((l) => (l.match(/[\p{L}]/gu) || []).length >= 2 && !parseDate(l) && !TOTAL_WORDS.test(l)) || '';
-  return { store, date: parseDate(text) || today(), total };
-}
-
-async function openReceipt() {
-  const text = await needText('영수증');
-  if (!text) return;
-  const r = parseReceipt(text);
-  openForm('영수증 저장', [
-    { key: 'store', label: '상호', value: r.store },
-    { key: 'date', label: '날짜', value: r.date, type: 'date' },
-    { key: 'total', label: '금액(원)', value: r.total || '', type: 'number' },
-    { key: 'category', label: '분류', value: '식비', options: ['식비', '교통', '쇼핑', '의료', '문화', '기타'] },
-  ], [
-    { label: '저장', primary: true, run(v) { db.add('receipts', { ...v, total: Number(v.total) || 0 }); } },
-    { label: '보관함', run() { showLibrary('receipts'); }, keep: true },
-    { label: '닫기' },
-  ]);
-}
 
 /* ---------- 명함 ---------- */
 
@@ -212,7 +182,6 @@ const csvCell = (s) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
 const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
 
 async function openTable() {
-  menuOverlay.hidden = true;
   openForm('표 → CSV', [], [{ label: '닫기' }], '<p class="status">표를 읽는 중…</p>');
   const w = await getWorker(ocrLang.value);
   const { data } = await w.recognize(sourceCanvas());
@@ -275,22 +244,11 @@ async function openVocab(prefill) {
 
 /* ---------- 보관함 ---------- */
 
-function showLibrary(tab = 'receipts') {
-  const tabs = [['receipts', '영수증'], ['cards', '명함'], ['vocab', '단어장']];
+function showLibrary(tab = 'cards') {
+  const tabs = [['cards', '명함'], ['vocab', '단어장']];
   const tabBar = `<div class="seg" style="margin:0 0 8px">${tabs.map(([k, t]) => `<label><input type="radio" name="lib-tab" value="${k}"${k === tab ? ' checked' : ''}><span>${t}</span></label>`).join('')}</div>`;
   let body = '', actions = [{ label: '닫기' }];
-  if (tab === 'receipts') {
-    const list = db.get('receipts');
-    const months = {};
-    for (const r of list) { const m = (r.date || '').slice(0, 7) || '날짜없음'; months[m] = (months[m] || 0) + (r.total || 0); }
-    body = `<div class="sum">${Object.entries(months).sort().reverse().map(([m, t]) => `${m} · ${won(t)}`).join('<br>') || '저장된 영수증이 없습니다'}</div>
-      <ul class="rows">${list.map((r) => `<li><div class="grow">${esc(r.store || '(상호 없음)')}<small>${esc(r.date)} · ${esc(r.category)}</small></div><b>${won(r.total || 0)}</b><button data-del="${r.id}">삭제</button></li>`).join('')}</ul>`;
-    if (list.length) actions = [{ label: 'CSV로 내보내기', primary: true, keep: true, async run() {
-      const rows = [['날짜', '상호', '분류', '금액'], ...list.map((r) => [r.date, r.store, r.category, String(r.total || 0)])];
-      await saveOrShare(new TextEncoder().encode(`\uFEFF${toCsv(rows)}`), 'SnapRead_가계부.csv', 'text/csv', '가계부 내보내기');
-      return 'keep';
-    } }, { label: '닫기' }];
-  } else if (tab === 'cards') {
+  if (tab === 'cards') {
     const list = db.get('cards');
     body = `<ul class="rows">${list.map((c) => `<li><div class="grow">${esc(c.name || '(이름 없음)')}<small>${esc([c.company, c.phone, c.email].filter(Boolean).join(' · '))}</small></div><button data-share="${c.id}">연락처</button><button data-del="${c.id}">삭제</button></li>`).join('') || '<li>저장된 명함이 없습니다</li>'}</ul>`;
   } else {

@@ -55,15 +55,16 @@ let region = null; // 인식할 영역 (사진 좌표). null 이면 사진 전�
 function setMode(mode) {
   document.body.classList.toggle('mode-camera', mode === 'camera');
   document.body.classList.toggle('mode-photo', mode === 'photo');
+  document.body.classList.toggle('mode-home', mode === 'home');
   const photo = mode === 'photo';
   video.hidden = photo;
   canvas.hidden = !photo;
   photoHint.hidden = !photo;
   if (!photo) { closePopup(); scanOverlay.hidden = true; }
-  if (photo && typeof onModeChange === 'function') onModeChange(mode);
+  if (mode !== 'camera' && typeof onModeChange === 'function') onModeChange(mode);
   $('camera-controls').hidden = photo;
   $('photo-controls').hidden = !photo;
-  if (photo) {
+  if (mode !== 'camera') {
     stopCamera();
     cameraMsg.hidden = true;
   } else {
@@ -170,6 +171,7 @@ function drawToCanvas(source, w, h, crop = { x: 0, y: 0 }) {
   resetView();
   setMode('photo');
   if (autoRun.checked) runOcr();
+  if (typeof onPhotoReady === 'function') onPhotoReady();
 }
 
 /* ---------- 인식 영역 선택 (사진 위를 드래그) ---------- */
@@ -985,7 +987,7 @@ async function loadCurrentVersion() {
 function renderUpdate(state) {
   const el = $('info-update');
   el.classList.toggle('available', state === 'available');
-  $('info-dot').hidden = state !== 'available';
+  $('info-dot').hidden = $('home-info-dot').hidden = state !== 'available';
   if (state === 'available') {
     el.textContent = `새 버전 ${latest.version}이(가) 있습니다. 아래 릴리스 페이지에서 받으세요.`;
     $('info-release').href = latest.url;
@@ -1049,6 +1051,7 @@ async function checkUpdate({ manual = false } = {}) {
 
 const infoOverlay = $('info-overlay');
 $('btn-info').addEventListener('click', () => { infoOverlay.hidden = false; });
+$('home-info').addEventListener('click', () => { infoOverlay.hidden = false; });
 $('info-close').addEventListener('click', () => { infoOverlay.hidden = true; });
 infoOverlay.addEventListener('click', (e) => { if (e.target === infoOverlay) infoOverlay.hidden = true; });
 $('info-recheck').addEventListener('click', () => checkUpdate({ manual: true }));
@@ -1062,11 +1065,11 @@ loadCurrentVersion().then(() => checkUpdate());
 
 /* ---------- 시작 ---------- */
 
-setMode('camera');
+setMode('home');
 // 첫 촬영 때 기다리지 않도록 OCR 엔진을 미리 준비
 getWorker(ocrLang.value).catch((err) => console.warn('OCR 준비 실패', err));
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopCamera();
-  else if (!document.body.classList.contains('mode-photo')) startCamera();
+  else if (document.body.classList.contains('mode-camera')) startCamera();
 });
