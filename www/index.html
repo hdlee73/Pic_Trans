@@ -25,6 +25,7 @@
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></symbol>
       <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 4v10M7.5 10l4.5 4.5 4.5-4.5M5 17v1.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V17"/></symbol>
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
     </defs>
   </svg>
@@ -39,6 +40,9 @@
         <button id="btn-info" class="icon-btn info-btn" title="앱 정보" aria-label="앱 정보">
           <svg class="ic"><use href="#i-info"/></svg><span id="info-dot" class="dot" hidden></span>
         </button>
+        <button id="btn-menu" class="icon-btn menu-btn" title="기능" aria-label="기능"><svg class="ic"><use href="#i-menu"/></svg></button>
+        <div id="live-layer" class="live-layer" hidden></div>
+        <div id="live-bar" class="live-bar" hidden><span id="live-title"></span><button id="live-stop" class="btn" type="button">끄기</button></div>
         <p id="camera-msg" class="placeholder">카메라를 시작하는 중…</p>
         <p id="photo-hint" class="hint" hidden>두 손가락으로 확대 · 글자 부분을 드래그하면 그 부분만 인식합니다</p>
       </div>
@@ -76,6 +80,7 @@
             <h2>추출된 문자</h2>
             <select id="ocr-lang" title="사진 속 글자의 언어" aria-label="사진 속 글자의 언어">
               <option value="eng">영어</option>
+              <option value="kor">한국어</option>
               <option value="jpn">일본어</option>
               <option value="jpn_vert">일본어 (세로쓰기)</option>
               <option value="chi_sim">중국어 간체</option>
@@ -133,6 +138,34 @@
     </section>
   </div>
 
+  <!-- 기능 메뉴 -->
+  <div id="menu-overlay" class="overlay" hidden>
+    <section class="sheet" role="dialog" aria-modal="true" aria-label="기능">
+      <h2>기능</h2>
+      <p id="menu-note" class="status"></p>
+      <div class="menu-grid">
+        <button class="menu-item" data-act="receipt" data-needs="photo" type="button"><b>영수증 가계부</b><small>금액·날짜·상호를 뽑아 저장</small></button>
+        <button class="menu-item" data-act="card" data-needs="photo" type="button"><b>명함 저장</b><small>이름·전화·이메일을 연락처로</small></button>
+        <button class="menu-item" data-act="table" data-needs="photo" type="button"><b>표 → CSV</b><small>사진 속 표를 엑셀 파일로</small></button>
+        <button class="menu-item" data-act="vocab" data-needs="photo" type="button"><b>단어장에 담기</b><small>추출한 글자에서 고른 단어 저장</small></button>
+        <button class="menu-item" data-act="qr" data-needs="camera" type="button"><b>QR·바코드</b><small>링크 열기, 와이파이, 상품 검색</small></button>
+        <button class="menu-item" data-act="ar" data-needs="camera" type="button"><b>실시간 번역</b><small>카메라 화면 위에 바로 번역 표시</small></button>
+        <button class="menu-item" data-act="library" type="button"><b>보관함</b><small>영수증 · 명함 · 단어장</small></button>
+      </div>
+      <div class="sheet-actions"><button id="menu-close" class="btn" type="button">닫기</button></div>
+    </section>
+  </div>
+
+  <!-- 편집·결과 시트 (영수증/명함/표/QR 결과 공용) -->
+  <div id="form-overlay" class="overlay" hidden>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="form-title">
+      <h2 id="form-title"></h2>
+      <div id="form-body"></div>
+      <p id="form-status" class="status"></p>
+      <div class="sheet-actions" id="form-actions"></div>
+    </section>
+  </div>
+
   <!-- 앱 정보 -->
   <div id="info-overlay" class="overlay" hidden>
     <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="info-title">
@@ -150,6 +183,8 @@
     </section>
   </div>
 
+  <script src="vendor/jsqr.js"></script>
   <script src="app.js"></script>
+  <script src="features.js"></script>
 </body>
 </html>
