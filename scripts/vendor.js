@@ -32,3 +32,7 @@ const zlib = require('zlib');
 const gz = path.join(mod('@tesseract.js-data/eng'), '4.0.0_best_int', 'eng.traineddata.gz');
 fs.writeFileSync(path.join(out, 'lang', 'eng.traineddata'), zlib.gunzipSync(fs.readFileSync(gz)));
 console.log('vendor: lang/eng.traineddata');
+
+// QR 코드 인식 (BarcodeDetector 를 쓸 수 없는 기기용)
+fs.copyFileSync(require.resolve('jsqr/dist/jsQR.js'), path.join(root, 'www', 'vendor', 'jsqr.js'));
+console.log('vendor: jsqr.js');

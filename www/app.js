@@ -21,7 +21,7 @@ const autoRun = $('auto-run');
 // Tesseract 언어 코드 → MyMemory 언어 코드 (예비 번역 서버용)
 const LANG_MAP = {
   eng: 'en', jpn: 'ja', chi_sim: 'zh-CN', chi_tra: 'zh-TW', fra: 'fr',
-  deu: 'de', spa: 'es', rus: 'ru', vie: 'vi', tha: 'th',
+  deu: 'de', spa: 'es', rus: 'ru', vie: 'vi', tha: 'th', kor: 'ko',
   // 세로쓰기 전용 모델
   jpn_vert: 'ja', chi_sim_vert: 'zh-CN', chi_tra_vert: 'zh-TW',
 };
@@ -60,6 +60,7 @@ function setMode(mode) {
   canvas.hidden = !photo;
   photoHint.hidden = !photo;
   if (!photo) { closePopup(); scanOverlay.hidden = true; }
+  if (photo && typeof onModeChange === 'function') onModeChange(mode);
   $('camera-controls').hidden = photo;
   $('photo-controls').hidden = !photo;
   if (photo) {
@@ -533,7 +534,7 @@ const MIN_LINE_CONFIDENCE = 55;
 const MIN_LINE_CONFIDENCE_CJK = 40;
 
 // 한 글자로도 뜻이 있는 언어 (한자·가나·태국 문자)
-const SINGLE_CHAR_LANGS = ['jpn', 'chi_sim', 'chi_tra', 'tha', 'jpn_vert', 'chi_sim_vert', 'chi_tra_vert'];
+const SINGLE_CHAR_LANGS = ['kor', 'jpn', 'chi_sim', 'chi_tra', 'tha', 'jpn_vert', 'chi_sim_vert', 'chi_tra_vert'];
 
 // 인식 결과에서 쓸 만한 줄만 고른다
 function minConfidenceFor(lang) {
