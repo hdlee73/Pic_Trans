@@ -388,3 +388,15 @@ select {
 .update-line.available { color: var(--danger); font-weight: 600; }
 .sheet-actions { display: flex; flex-direction: column; gap: 8px; }
 .sheet-actions .btn { justify-content: center; text-decoration: none; }
+
+/* 스캔 저장 */
+.scan-preview { display: block; margin: 0 auto 8px; max-width: 100%; border: 1px solid rgba(128, 128, 128, .3); max-height: 38vh; object-fit: contain; border-radius: 8px; }
+.seg { display: flex; gap: 6px; margin: 10px 0 0; }
+.seg label { flex: 1; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg span {
+  display: block; text-align: center; padding: 9px 4px; border-radius: 8px;
+  background: rgba(128, 128, 128, .15); color: var(--text); font-size: 14px; cursor: pointer;
+}
+.seg input:checked + span { background: var(--accent); color: #fff; }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); }

@@ -23,6 +23,8 @@
       <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
       <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15M8 10h8M8 14h5"/></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></symbol>
+      <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 4v10M7.5 10l4.5 4.5 4.5-4.5M5 17v1.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V17"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
     </defs>
   </svg>
@@ -56,6 +58,8 @@
         <div class="tools">
           <button id="btn-retake" class="icon-btn" title="다시 찍기" aria-label="다시 찍기"><svg class="ic"><use href="#i-camera"/></svg></button>
           <button id="btn-rotate" class="icon-btn" title="사진 돌리기" aria-label="사진 돌리기"><svg class="ic"><use href="#i-rotate"/></svg></button>
+          <button id="btn-scan" class="icon-btn" title="스캔 저장" aria-label="스캔 저장"><svg class="ic"><use href="#i-save"/></svg></button>
+          <button id="btn-search" class="icon-btn" title="구글 이미지 검색" aria-label="구글 이미지 검색"><svg class="ic"><use href="#i-search"/></svg></button>
           <button id="btn-full" class="icon-btn" title="전체 인식" aria-label="전체 인식" hidden><svg class="ic"><use href="#i-full"/></svg></button>
         </div>
         <button id="btn-open-result" class="btn primary">번역</button>
@@ -105,6 +109,29 @@
       </section>
     </div>
   </main>
+
+  <!-- 스캔 저장 -->
+  <div id="scan-overlay" class="overlay" hidden>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="scan-title">
+      <h2 id="scan-title">스캔 저장</h2>
+      <canvas id="scan-preview" class="scan-preview"></canvas>
+      <p id="scan-scope" class="status"></p>
+      <div class="seg" id="scan-filter" role="radiogroup" aria-label="보정">
+        <label><input type="radio" name="scan-filter" value="bw" checked><span>문서(흑백)</span></label>
+        <label><input type="radio" name="scan-filter" value="gray"><span>그레이</span></label>
+        <label><input type="radio" name="scan-filter" value="color"><span>원본</span></label>
+      </div>
+      <div class="seg" id="scan-format" role="radiogroup" aria-label="형식">
+        <label><input type="radio" name="scan-format" value="pdf" checked><span>PDF</span></label>
+        <label><input type="radio" name="scan-format" value="jpg"><span>이미지(JPG)</span></label>
+      </div>
+      <p id="scan-status" class="status"></p>
+      <div class="sheet-actions">
+        <button id="scan-save" class="btn primary" type="button">저장</button>
+        <button id="scan-close" class="btn" type="button">닫기</button>
+      </div>
+    </section>
+  </div>
 
   <!-- 앱 정보 -->
   <div id="info-overlay" class="overlay" hidden>
