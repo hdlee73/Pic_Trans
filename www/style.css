@@ -219,8 +219,8 @@ canvas { object-fit: contain; }
 .results {
   position: relative;
   gap: 0;
-  width: min(100%, 640px);
-  height: min(100%, 560px);
+  width: min(100%, 760px);
+  height: min(100%, 640px);
 }
 
 .close-btn {
@@ -281,15 +281,15 @@ textarea {
   border: 0;
   padding: 2px 16px 12px;
   font: inherit;
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.5;
   background: transparent;
   color: var(--text);
   outline: none;
 }
 textarea::placeholder { color: var(--muted); opacity: .7; }
 
-#trans-text { font-size: 17px; }
+#trans-text { font-size: 15px; }
 
 .btn,
 select {
@@ -348,8 +348,8 @@ select {
   .icon-btn { width: 40px; height: 40px; }
   .block header, .block footer { padding: 6px 12px; }
   .btn { height: 36px; }
-  textarea { font-size: 15px; padding: 0 12px 8px; }
-  #trans-text { font-size: 16px; }
+  textarea { font-size: 13.5px; padding: 0 12px 8px; }
+  #trans-text { font-size: 14px; }
 }
 
 /* 높이가 낮은 가로 화면에서는 카메라 버튼을 옆 세로줄로 */
@@ -584,6 +584,7 @@ details.help-item .help-steps { margin-top: 8px; }
 .bs-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .bs-row .btn { height: 36px; font-size: 13px; padding: 0 12px; background: rgba(255, 255, 255, .12); border-color: transparent; color: #f1f3f6; white-space: nowrap; }
 .bs-row .btn.on { background: #fff; color: #15181e; }
+.bs-row .btn:disabled { opacity: .4; }
 .bs-actions { flex: none; display: flex; gap: 8px; padding: 0 calc(var(--safe-right) + 12px) calc(var(--safe-bottom) + 12px) calc(var(--safe-left) + 12px); }
 .bs-actions .btn { flex: 1; justify-content: center; height: 46px; font-size: 15px; white-space: nowrap; }
 .bs-actions .btn:not(.primary) { background: rgba(255, 255, 255, .14); border-color: transparent; color: #f1f3f6; }

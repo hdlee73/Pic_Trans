@@ -265,7 +265,7 @@ function detectSpine(src, q) {
 /* ---------- 편집 화면 ---------- */
 
 const bs = {
-  src: null, quad: null, spine: [0.5, 0.5], split: false, flatten: true, filter: 'clean',
+  src: null, quad: null, spine: [0.5, 0.5], split: false, flatten: true, curve: true, fingers: false, filter: 'clean',
   k: 1, ox: 0, view: 'edit', dom: null, drag: null,
 };
 
@@ -291,6 +291,8 @@ function bsEnsureDom() {
       <div class="bs-row" style="flex-wrap:wrap">
         <button id="bs-split" class="btn" type="button">두 쪽으로 나누기</button>
         <button id="bs-flat" class="btn" type="button">평평하게 펴기</button>
+        <button id="bs-curve" class="btn" type="button">휘어짐 보정</button>
+        <button id="bs-finger" class="btn" type="button">손가락 지우기</button>
         <button id="bs-auto" class="btn" type="button">자동 맞추기</button>
         <button id="bs-frame" class="btn" type="button" hidden>틀 그대로</button>
         <button id="bs-rot" class="btn" type="button">돌리기</button>
@@ -309,7 +311,7 @@ function bsEnsureDom() {
     </div>
   </div>`);
   const d = {};
-  for (const id of ['bs', 'bs-close', 'bs-count', 'bs-stage', 'bs-wrap', 'bs-canvas', 'bs-svg', 'bs-loupe', 'bs-preview', 'bs-hint', 'bs-busy', 'bs-split', 'bs-flat', 'bs-auto', 'bs-frame', 'bs-rot', 'bs-view', 'bs-next', 'bs-done']) d[id] = $(id);
+  for (const id of ['bs', 'bs-close', 'bs-count', 'bs-stage', 'bs-wrap', 'bs-canvas', 'bs-svg', 'bs-loupe', 'bs-preview', 'bs-hint', 'bs-busy', 'bs-split', 'bs-flat', 'bs-curve', 'bs-finger', 'bs-auto', 'bs-frame', 'bs-rot', 'bs-view', 'bs-next', 'bs-done']) d[id] = $(id);
   bs.dom = d;
 
   d['bs-close'].addEventListener('click', bsClose);
@@ -319,6 +321,8 @@ function bsEnsureDom() {
     bsRefresh();
   });
   d['bs-flat'].addEventListener('click', () => { bs.flatten = !bs.flatten; bsRefresh(); });
+  d['bs-curve'].addEventListener('click', () => { bs.curve = !bs.curve; bsRefresh(); });
+  d['bs-finger'].addEventListener('click', () => { bs.fingers = !bs.fingers; bsRefresh(); });
   d['bs-auto'].addEventListener('click', () => bsAutoFit(true));
   // 촬영 때 보이던 가이드 틀 그대로 영역을 잡는다 (자동 맞추기가 어긋날 때)
   d['bs-frame'].addEventListener('click', () => {
@@ -445,15 +449,54 @@ function bsDrawOverlay() {
   bs.dom['bs-svg'].innerHTML = html;
 }
 
-function bsPageQuads() {
-  if (!bs.split) return [bs.quad];
-  const [TL, TR, BR, BL] = bs.quad;
-  const st = lerpPt(TL, TR, bs.spine[0]), sb = lerpPt(BL, BR, bs.spine[1]);
-  return [[TL, st, sb, BL], [st, TR, BR, sb]];
+// 쪽 목록: 각 쪽의 사각형 q 와 변 휘어짐 curv (휘어짐 보정이 꺼져 있으면 curv 없음)
+function bsPages() {
+  const q = bs.quad;
+  let cv = null;
+  if (bs.flatten && bs.curve) {
+    const key = q.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join('|');
+    if (bs.curvKey !== key) {
+      try { bs.curvVal = edgeCurves(bs.src, q); } catch (err) { console.warn('휘어짐 계산 실패', err); bs.curvVal = null; }
+      bs.curvKey = key;
+    }
+    cv = bs.curvVal;
+  }
+  if (!bs.split) return [{ q, curv: cv }];
+  const [TL, TR, BR, BL] = q;
+  let st = lerpPt(TL, TR, bs.spine[0]), sb = lerpPt(BL, BR, bs.spine[1]);
+  if (!cv) return [{ q: [TL, st, sb, BL], curv: null }, { q: [st, TR, BR, sb], curv: null }];
+  const [ct, cr, cb, cl] = cv.c, [nT, nR, nB, nL] = cv.n;
+  const t = bs.spine[0], u = bs.spine[1];
+  // 제본선이 닿는 윗·아랫변 점은 변이 휜 만큼 안쪽으로 옮긴다
+  st = { x: st.x + nT.x * 4 * ct * t * (1 - t), y: st.y + nT.y * 4 * ct * t * (1 - t) };
+  sb = { x: sb.x + nB.x * 4 * cb * u * (1 - u), y: sb.y + nB.y * 4 * cb * u * (1 - u) };
+  const zero = { x: 0, y: 0 };
+  const ft = (a, b) => (b - a) * (b - a);
+  return [
+    { q: [TL, st, sb, BL], curv: { c: [ct * ft(0, t), 0, cb * ft(0, u), cl], n: [nT, zero, nB, nL] } },
+    { q: [st, TR, BR, sb], curv: { c: [ct * ft(t, 1), cr, cb * ft(u, 1), 0], n: [nT, nR, nB, zero] } },
+  ];
 }
 
-function bsRenderPage(q, maxSide) {
-  const flat = bs.flatten ? warpQuad(bs.src, q, ...outSize(q, maxSide)) : cropBounds(bs.src, q, maxSide);
+// 손가락 지우기가 켜져 있으면 지운 사본을 (한 번만 만들어) 쓴다
+function bsSource() {
+  if (!bs.fingers) return bs.src;
+  const key = bs.quad.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join('|');
+  if (!bs.clean || bs.cleanOf !== bs.src || bs.cleanKey !== key) {
+    try { bs.clean = removeFingers(bs.src, bs.quad); } catch (err) { console.warn('손가락 지우기 실패', err); bs.clean = bs.src; }
+    if (bs.clean !== bs.src) bs.clean._stamp = (bs.src._stamp || 0) + 100000 + (bs.cleanN = (bs.cleanN || 0) + 1);
+    bs.cleanOf = bs.src; bs.cleanKey = key;
+  }
+  return bs.clean;
+}
+
+function bsRenderPage(pg, maxSide) {
+  const { q, curv } = pg;
+  const src = bsSource();
+  let flat;
+  if (!bs.flatten) flat = cropBounds(src, q, maxSide);
+  else if (curv) flat = warpPatch(src, q, curv, ...outSize(q, maxSide));
+  else flat = warpQuad(src, q, ...outSize(q, maxSide));
   return applyScanFilter(flat, bs.filter);
 }
 
@@ -462,8 +505,8 @@ async function bsRenderPreview() {
   bsBusy(true);
   await sleep(30);
   box.replaceChildren();
-  for (const q of bsPageQuads()) {
-    const c = bsRenderPage(q, 760);
+  for (const pg of bsPages()) {
+    const c = bsRenderPage(pg, 760);
     box.append(c);
     await sleep(0);
   }
@@ -477,6 +520,9 @@ function bsRefresh() {
   const d = bs.dom;
   d['bs-split'].classList.toggle('on', bs.split);
   d['bs-flat'].classList.toggle('on', bs.flatten);
+  d['bs-curve'].classList.toggle('on', bs.curve && bs.flatten);
+  d['bs-curve'].disabled = !bs.flatten;
+  d['bs-finger'].classList.toggle('on', bs.fingers);
   d['bs-count'].textContent = bookPages.length ? `찍어 둔 ${bookPages.length}쪽` : '';
   const preview = bs.view === 'preview';
   d['bs-wrap'].hidden = preview;
@@ -497,6 +543,7 @@ async function bsAutoFit(announce) {
   let q = null;
   try { q = detectQuad(src); } catch (err) { console.warn('모서리 찾기 실패', err); }
   const found = !!q;
+  if (q) { try { q = refineQuad(src, q); } catch (err) { console.warn('모서리 다듬기 실패', err); } }
   if (!q) {
     const mx = src.width * 0.06, my = src.height * 0.08;
     q = bs.guideQuad ? bs.guideQuad.map((p) => ({ ...p })) : [{ x: mx, y: my }, { x: src.width - mx, y: my }, { x: src.width - mx, y: src.height - my }, { x: mx, y: src.height - my }];
@@ -536,6 +583,10 @@ async function openBookEditor() {
   bs.view = 'edit';
   bs.split = bookMode() === 'spread';
   bs.flatten = true;
+  bs.curve = true;
+  bs.fingers = false;
+  bs.clean = null;
+  bs.curvKey = null;
   bs.filter = document.querySelector('input[name="bs-filter"]:checked').value;
   d.bs.hidden = false;
   d['bs-frame'].hidden = !bs.guideQuad;
@@ -563,8 +614,8 @@ async function bsCommit(then) {
   bsBusy(true);
   await sleep(30);
   try {
-    for (const q of bsPageQuads()) {
-      const c = bsRenderPage(q, 2200);
+    for (const pg of bsPages()) {
+      const c = bsRenderPage(pg, 2200);
       const jpeg = await canvasToJpeg(c, 0.88);
       const t = document.createElement('canvas');
       const k = 160 / Math.max(c.width, c.height);

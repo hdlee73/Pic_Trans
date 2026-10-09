@@ -110,10 +110,11 @@ const HELP = {
     steps: [
       '위쪽 스위치에서 "한 쪽" 또는 "두 쪽 펼침"을 고르고, 가이드 틀 안에 책이나 문서를 맞춰 촬영하세요. 두 쪽이면 노란 점선을 책 가운데(제본선)에 맞춥니다.',
       '편집 화면에서 가이드 틀 안쪽만 대상으로 네 모서리를 자동으로 맞춰 줍니다. 어긋나면 점을 끌어 고치거나 "틀 그대로"를 누르세요. "두 쪽으로 나누기"를 켜면 가운데 두 점으로 쪽 경계를 맞춥니다.',
-      '"평평하게 펴기"는 기울어 찍힌 쪽을 반듯한 사각형으로 펴 주고, "선명(컬러)"는 책 가운데 그림자를 옅게 합니다. "결과 보기"로 미리 확인하세요.',
+      '"평평하게 펴기"는 기울어 찍힌 쪽을 반듯한 사각형으로 펴 주고, "휘어짐 보정"은 책 가장자리가 곡선으로 휜 만큼 함께 펴 줍니다. "선명(컬러)"는 책 가운데 그림자를 옅게 합니다. "결과 보기"로 미리 확인하세요.',
+      '"손가락 지우기"는 쪽 가장자리를 누른 손가락(살색 덩어리)을 종이색으로 메웁니다. 분홍·주황 형광펜이 가장자리에 있으면 같이 지워질 수 있어 기본은 꺼져 있으니, 결과 보기로 확인하며 켜세요.',
       '"다음 쪽 촬영"으로 계속 찍고, 다 찍으면 "완료"에서 PDF 한 파일 또는 JPG 여러 장으로 저장합니다.',
     ],
-    tip: '밝은 곳에서 손이나 휴대폰 그림자가 지지 않게 찍고, 책은 손으로 눌러 최대한 평평하게 펴 주세요. 심하게 휘어진 쪽의 곡면은 완전히 펴지지 않습니다.',
+    tip: '밝은 곳에서 손이나 휴대폰 그림자가 지지 않게 찍고, 책은 손으로 눌러 최대한 평평하게 펴 주세요. 휘어짐 보정은 쪽 가장자리 곡선을 바탕으로 한 근사라서, 글줄 하나하나를 펴지는 못합니다.',
   },
   card: {
     title: '명함 저장',
@@ -756,7 +757,17 @@ function drawLabels(items, frame) {
     el.style.top = `${Math.max(2, oy + it.bbox.y0 * k2)}px`;
     el.style.minWidth = `${Math.min((it.bbox.x1 - it.bbox.x0) * k2, cw - left - 2)}px`;
     el.style.maxWidth = `${cw - left - 2}px`;
-    el.style.fontSize = `${Math.max(12, Math.min(24, h * 0.8))}px`;
+    // 원문 상자 크기에 맞춰 글자를 줄인다: 상자에 번역이 다 들어갈 때까지 (최소 9px) — 화면에 더 많은 정보가 보이도록
+    const bw = Math.max(40, Math.min((it.bbox.x1 - it.bbox.x0) * k2, cw - left - 2));
+    let fs = Math.max(9, Math.min(15, h * 0.62));
+    while (fs > 9) {
+      const perLine = Math.max(1, Math.floor((bw - 8) / (fs * 0.9)));
+      const lines = Math.max(1, Math.floor(Math.max(h, fs * 1.2) / (fs * 1.15)));
+      if (perLine * lines >= t.length) break;
+      fs -= 0.5;
+    }
+    el.style.fontSize = `${fs}px`;
+    el.style.fontWeight = '500';
     return el;
   }).filter(Boolean));
 }
