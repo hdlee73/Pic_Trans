@@ -109,7 +109,7 @@ const HELP = {
     title: '북스캔 · 문서 스캔',
     steps: [
       '위쪽 스위치에서 "한 쪽" 또는 "두 쪽 펼침"을 고르고, 가이드 틀 안에 책이나 문서를 맞춰 촬영하세요. 두 쪽이면 노란 점선을 책 가운데(제본선)에 맞춥니다.',
-      '편집 화면에서 네 모서리 점을 책 모서리에 맞게 끌어 주세요. 처음엔 자동으로 찾아 줍니다. "두 쪽으로 나누기"를 켜면 가운데 두 점으로 쪽 경계를 맞춥니다.',
+      '편집 화면에서 가이드 틀 안쪽만 대상으로 네 모서리를 자동으로 맞춰 줍니다. 어긋나면 점을 끌어 고치거나 "틀 그대로"를 누르세요. "두 쪽으로 나누기"를 켜면 가운데 두 점으로 쪽 경계를 맞춥니다.',
       '"평평하게 펴기"는 기울어 찍힌 쪽을 반듯한 사각형으로 펴 주고, "선명(컬러)"는 책 가운데 그림자를 옅게 합니다. "결과 보기"로 미리 확인하세요.',
       '"다음 쪽 촬영"으로 계속 찍고, 다 찍으면 "완료"에서 PDF 한 파일 또는 JPG 여러 장으로 저장합니다.',
     ],
@@ -141,9 +141,9 @@ const HELP = {
   vocab: {
     title: '단어장에 담기',
     steps: [
-      '글자가 있는 곳을 촬영하면 글자가 추출됩니다.',
-      '추출된 글자(번역 결과 창)에서 단어를 길게 눌러 고른 뒤 "단어장" 버튼을 누르면 뜻과 함께 저장됩니다.',
-      '저장한 단어는 메뉴의 보관함 → 단어장에서 카드로 복습할 수 있습니다.',
+      '단어를 찾을 글자를 촬영하세요. 글자가 일부에만 있으면 사진에서 그 부분을 드래그해 범위를 고르세요.',
+      '"단어 고르기"를 누르면 읽어 낸 글자가 단어 칩으로 나옵니다. 저장할 단어를 눌러 고르세요 (여러 개 가능).',
+      '"단어장에 담기"를 누르면 뜻이 자동으로 채워진 저장 창이 열립니다. 저장한 단어는 보관함 → 단어장에서 카드로 복습할 수 있습니다.',
     ],
   },
   qr: {
@@ -218,6 +218,15 @@ function layoutGuide() {
 }
 window.addEventListener('resize', layoutGuide);
 
+// 지금 보이는 가이드 틀의 위치 (화면=사진 전체 기준 0~1). 틀이 없으면 null
+function guideRectNorm() {
+  if (pendingAct !== 'scan' || $('guide').hidden) return null;
+  const f = $('guide-frame');
+  const W = media.clientWidth, H = media.clientHeight;
+  if (!W || !H || !f.offsetWidth) return null;
+  return { x: f.offsetLeft / W, y: f.offsetTop / H, w: f.offsetWidth / W, h: f.offsetHeight / H };
+}
+
 // 북스캔: 한 쪽 / 두 쪽 선택 (선택은 기억)
 const bookMode = () => document.querySelector('input[name="book-mode"]:checked').value;
 {
@@ -246,7 +255,7 @@ const PHOTO_ACTS = {
   translate: () => $('btn-open-result').click(),
   scan: () => openBookEditor(),
   search: () => $('btn-search').click(),
-  card: openCard, table: openTable, vocab: openVocab,
+  card: openCard, table: openTable,
 };
 
 function goHome(force = false) {
@@ -262,6 +271,11 @@ $('btn-menu').addEventListener('click', () => goHome());
 
 // 사진이 찍히면(또는 골라지면) 메뉴에서 고른 기능을 이어서 실행
 function onPhotoReady() {
+  // 단어장: 바로 추가 창을 띄우지 않고, 사진에서 범위를 고른 뒤 "단어 고르기"를 누르게 한다
+  const vocab = pendingAct === 'vocab';
+  $('btn-open-result').textContent = vocab ? '단어 고르기' : '번역';
+  if (vocab) { $('photo-hint').textContent = '글자 부분을 드래그해 범위를 고른 뒤 "단어 고르기"를 누르세요'; return; }
+  $('photo-hint').textContent = '두 손가락으로 확대 · 글자 부분을 드래그하면 그 부분만 인식합니다';
   const act = PHOTO_ACTS[pendingAct];
   if (act) setTimeout(act, 0);
 }
@@ -364,6 +378,36 @@ function selectedText() {
     if (s) return { text: s, fromTrans: el === transText };
   }
   return { text: '', fromTrans: false };
+}
+
+// 추출된 글자를 단어(칩)로 보여 주고, 눌러서 고르면 단어장 추가 창으로 넘어간다
+async function openVocabPicker() {
+  openForm('단어 고르기', [], [{ label: '닫기' }], '<p class="status" style="text-align:left">글자를 읽는 중…</p>');
+  const text = await ensureText();
+  if (!text) {
+    $('form-body').innerHTML = '<p class="status error" style="text-align:left">글자를 찾지 못했습니다. 사진에서 글자 부분을 드래그하거나 사진 언어를 바꿔 보세요.</p>';
+    return;
+  }
+  // 띄어쓰기 없는 언어(일본어·중국어)는 줄 단위로, 나머지는 단어 단위로 나눈다
+  const byLine = ['jpn', 'jpn_vert', 'chi_sim', 'chi_sim_vert', 'chi_tra', 'chi_tra_vert'].includes(ocrLang.value);
+  const tokens = byLine ? text.split('\n') : text.split(/\s+/);
+  const chips = [...new Set(tokens.map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')).filter(Boolean))];
+  const picked = new Set();
+  const html = '<p class="status" style="text-align:left;margin:0 0 8px">저장할 단어를 눌러 고르세요 (여러 개 가능)</p>'
+    + `<div class="chips">${chips.map((c, i) => `<button type="button" class="chip" data-i="${i}">${esc(c)}</button>`).join('')}</div>`;
+  openForm('단어 고르기', [], [
+    { label: '단어장에 담기', primary: true, run() {
+      if (!picked.size) throw new Error('단어를 하나 이상 고르세요');
+      openVocab({ text: [...picked].sort((x, y) => x - y).map((i) => chips[i]).join(' '), fromTrans: false });
+      return 'keep';
+    } },
+    { label: '닫기' },
+  ], html);
+  formOverlay.querySelectorAll('.chip').forEach((el) => el.addEventListener('click', () => {
+    const i = Number(el.dataset.i);
+    if (picked.has(i)) picked.delete(i); else picked.add(i);
+    el.classList.toggle('on', picked.has(i));
+  }));
 }
 
 async function openVocab(prefill) {
@@ -589,31 +633,88 @@ async function translateLine(text) {
   }
 }
 
+// 기기 안의 ML Kit(안드로이드 앱)이 지원하는 글자 종류. 없는 언어·웹 화면에서는 Tesseract 로 읽는다
+const MLKIT_SCRIPT = {
+  eng: 'latin', fra: 'latin', deu: 'latin', spa: 'latin', vie: 'latin',
+  kor: 'korean', jpn: 'japanese', jpn_vert: 'japanese',
+  chi_sim: 'chinese', chi_sim_vert: 'chinese', chi_tra: 'chinese', chi_tra_vert: 'chinese',
+};
+let nativeBroken = false;
+const nativeScanner = (lang) => (!nativeBroken && plugins.TextScan?.recognize && MLKIT_SCRIPT[lang] ? plugins.TextScan : null);
+
+// 화면 한 장에서 글자 줄(글자 + 위치)을 읽어 낸다
+async function scanFrame(frame, lang, ns) {
+  const single = SINGLE_CHAR_LANGS.includes(lang);
+  const minChars = single ? 1 : 2;
+  if (ns) {
+    const { lines } = await ns.recognize({ image: frame.c.toDataURL('image/jpeg', 0.8), script: MLKIT_SCRIPT[lang] });
+    return (lines || [])
+      .filter((l) => (l.confidence ?? 1) >= 0.45 && (l.text.match(/[\p{L}\p{N}]/gu) || []).length >= minChars)
+      .map((l) => ({ text: l.text.replace(/\s+/g, ' ').trim(), bbox: { x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1 } }));
+  }
+  const w = await getWorker(lang);
+  // 흩어진 글자 모드. 조명이 고르지 않은 카메라 영상은 주변 밝기 기준으로 흑백 처리해야 잘 읽힌다
+  await w.setParameters({ tessedit_pageseg_mode: '11' });
+  const { data } = await w.recognize(applyScanFilter(frame.c, 'bw'));
+  const min = Math.max(25, minConfidenceFor(lang) - 10);
+  return (data.lines || [])
+    .filter((l) => readLines({ lines: [l] }, lang, min).length)
+    .map((l) => ({ text: fixCommonErrors(l.text.trim(), lang), bbox: l.bbox }));
+}
+
+// 화면이 많이 움직이는 중인지 (흔들릴 때 인식하면 느리기만 하고 틀린다). 24×24 흑백 비교
+let lastSig = null;
+function frameMotion(frame) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 24;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(frame.c, 0, 0, 24, 24);
+  const d = ctx.getImageData(0, 0, 24, 24).data;
+  const sig = new Uint8Array(576);
+  for (let i = 0, j = 0; j < 576; i += 4, j++) sig[j] = (d[i] + d[i + 1] + d[i + 2]) / 3;
+  let diff = 0;
+  if (lastSig) for (let j = 0; j < 576; j++) diff += Math.abs(sig[j] - lastSig[j]);
+  lastSig = sig;
+  return lastSig && diff / 576;
+}
+
 async function arLoop(alive) {
   let empty = 0;
   let netFail = 0;
+  let lastScan = 0;
+  lastSig = null;
   while (alive()) {
-    const frame = grabFrame(1280);
+    const lang = ocrLang.value;
+    let ns = nativeScanner(lang);
+    const frame = grabFrame(ns ? 1280 : 960);
     if (!frame) { await sleep(300); continue; }
+    // 앱 안의 빠른 인식을 못 쓸 때는 움직이는 동안 쉬어 가며 읽는다
+    if (!ns) {
+      const motion = frameMotion(frame);
+      if (motion > 14 && Date.now() - lastScan < 4000) { await sleep(120); continue; }
+    }
     try {
-      const lang = ocrLang.value;
-      if (!workerReady(lang)) setLiveHint('글자 인식 엔진을 준비하는 중… (처음 한 번만 걸려요)');
-      const w = await getWorker(lang);
+      if (!ns && !workerReady(lang)) setLiveHint('글자 인식 엔진을 준비하는 중… (처음 한 번만 걸려요)');
+      let items;
+      try {
+        items = await scanFrame(frame, lang, ns);
+      } catch (err) {
+        if (!ns) throw err;
+        // 앱 안의 인식 기능이 없는 빌드이거나 실패하면 Tesseract 로 계속
+        console.warn('ML Kit 인식 실패, Tesseract 로 전환', err);
+        nativeBroken = true;
+        ns = null;
+        continue;
+      }
+      lastScan = Date.now();
       if (!alive()) return;
-      // 실시간은 화면 속 글자가 여러 군데 흩어져 있으므로 흩어진 글자 모드로 읽는다
-      await w.setParameters({ tessedit_pageseg_mode: '11' });
-      const { data } = await w.recognize(frame.c);
-      if (!alive()) return;
-      // 위치(bbox)가 필요하므로 줄마다 따로 신뢰도 검사. 움직이는 영상이라 사진보다 기준을 낮춘다
-      const min = Math.max(25, minConfidenceFor(lang) - 10);
-      const picked = (data.lines || []).filter((l) => readLines({ lines: [l] }, lang, min).length);
-      const items = picked.slice(0, 10).map((l) => ({ text: fixCommonErrors(l.text.trim(), lang), bbox: l.bbox }));
+      items = items.slice(0, 12);
       if (!items.length) {
         if (++empty >= 3) setLiveHint('글자를 찾지 못했어요. 글자에 더 가까이, 또렷하게 비춰 주세요');
         liveLayer.replaceChildren();
       } else {
         empty = 0;
-        const todo = lang === 'kor' ? [] : items.filter((it) => !arCache.has(arKey(it.text))).slice(0, 4);
+        const todo = lang === 'kor' ? [] : items.filter((it) => !arCache.has(arKey(it.text))).slice(0, 6);
         if (todo.length) setLiveHint('번역하는 중…');
         const results = await Promise.allSettled(todo.map((it) => translateLine(it.text)));
         if (!alive()) return;
@@ -630,7 +731,7 @@ async function arLoop(alive) {
       if (alive()) setLiveHint(`글자 인식 오류: ${err.message || err}`, true);
       await sleep(1500);
     }
-    await sleep(150);
+    await sleep(ns ? 60 : 150);
   }
 }
 
