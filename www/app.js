@@ -60,7 +60,7 @@ function setMode(mode) {
   video.hidden = photo;
   canvas.hidden = !photo;
   photoHint.hidden = !photo;
-  if (!photo) { closePopup(); scanOverlay.hidden = true; }
+  if (!photo) closePopup();
   if (mode !== 'camera' && typeof onModeChange === 'function') onModeChange(mode);
   $('camera-controls').hidden = photo;
   $('photo-controls').hidden = !photo;
@@ -71,6 +71,7 @@ function setMode(mode) {
     clearRegion();
     resetView();
     startCamera();
+    if (typeof onCameraMode === 'function') onCameraMode();
   }
 }
 
@@ -717,8 +718,7 @@ $('btn-close-result').addEventListener('click', closePopup);
 popup.addEventListener('click', (e) => { if (e.target === popup) closePopup(); });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!scanOverlay.hidden) scanOverlay.hidden = true;
-  else if (!popup.hidden) closePopup();
+  if (!popup.hidden) closePopup();
 });
 
 $('btn-copy').addEventListener('click', async () => {
@@ -732,11 +732,7 @@ $('btn-copy').addEventListener('click', async () => {
   }
 });
 
-/* ---------- 스캔 저장 (PDF / 이미지) ---------- */
-
-const scanOverlay = $('scan-overlay');
-const scanPreview = $('scan-preview');
-const scanStatus = $('scan-status');
+/* ---------- 스캔 공용 도구 (보정 · PDF · 저장) — 화면은 bookscan.js ---------- */
 
 // 선택 영역이 있으면 그 부분만, 없으면 사진 전체
 function sourceCanvas() {
@@ -751,6 +747,7 @@ function sourceCanvas() {
 // 문서처럼 보이도록 보정. gray: 흑백 톤, bw: 주변 밝기와 비교해 글자만 검게 (그림자에 강함)
 function applyScanFilter(src, filter) {
   if (filter === 'color') return src;
+  if (filter === 'clean') return flattenLight(src);
   const w = src.width, h = src.height;
   const out = document.createElement('canvas');
   out.width = w; out.height = h;
@@ -792,6 +789,45 @@ function applyScanFilter(src, filter) {
   return out;
 }
 
+// 선명(컬러): 색은 그대로 두고 종이 바탕을 하얗게 — 책 가운데 그림자·조명 얼룩을 펴 준다.
+// 주변 평균 밝기(적분 이미지)로 나눠서 밝기를 고르게 맞춘다
+function flattenLight(src) {
+  const w = src.width, h = src.height;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(src, 0, 0);
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  const iw = w + 1;
+  const sum = new Float64Array(iw * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      row += (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000;
+      sum[(y + 1) * iw + x + 1] = sum[y * iw + x + 1] + row;
+    }
+  }
+  const r = Math.max(10, Math.round(Math.min(w, h) / 10));
+  // 글자·그림은 평균에 섞이므로 "가장 밝은 쪽(종이)" 쪽으로 보정값을 올려 잡는다
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
+      const total = sum[y1 * iw + x1] - sum[y0 * iw + x1] - sum[y1 * iw + x0] + sum[y0 * iw + x0];
+      const mean = total / ((x1 - x0) * (y1 - y0));
+      const f = Math.min(2.2, 238 / Math.max(40, mean * 1.08));
+      const i = (y * w + x) * 4;
+      d[i] = Math.min(255, d[i] * f);
+      d[i + 1] = Math.min(255, d[i + 1] * f);
+      d[i + 2] = Math.min(255, d[i + 2] * f);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return out;
+}
+
 function canvasToJpeg(c, quality = 0.9) {
   return new Promise((resolve, reject) => {
     c.toBlob(async (blob) => {
@@ -801,12 +837,10 @@ function canvasToJpeg(c, quality = 0.9) {
   });
 }
 
-// JPEG 한 장을 한 페이지짜리 PDF로 감싼다 (외부 라이브러리 없이)
-function makePdf(jpeg, w, h) {
+// JPEG 여러 장을 한 PDF로 묶는다 (외부 라이브러리 없이). pages: [{ jpeg, w, h }]
+function makePdf(pages) {
   const enc = new TextEncoder();
   const pageW = 595; // A4 가로(pt). 세로는 사진 비율에 맞춤
-  const pageH = Math.round(pageW * h / w);
-  const content = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q`;
   const parts = [];
   const offsets = [];
   let length = 0;
@@ -822,14 +856,22 @@ function makePdf(jpeg, w, h) {
     if (stream) { push('stream\n'); push(stream); push('\nendstream\n'); }
     push('endobj\n');
   };
+  const count = pages.length;
+  const kids = pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
   object(1, '<< /Type /Catalog /Pages 2 0 R >>');
-  object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  object(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
-  object(4, `<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>`, jpeg);
-  object(5, `<< /Length ${content.length} >>`, content);
+  object(2, `<< /Type /Pages /Kids [${kids}] /Count ${count} >>`);
+  pages.forEach((pg, i) => {
+    const pageH = Math.round(pageW * pg.h / pg.w);
+    const content = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q`;
+    const n = 3 + i * 3;
+    object(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${n + 1} 0 R >> >> /Contents ${n + 2} 0 R >>`);
+    object(n + 1, `<< /Type /XObject /Subtype /Image /Width ${pg.w} /Height ${pg.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.jpeg.length} >>`, pg.jpeg);
+    object(n + 2, `<< /Length ${content.length} >>`, content);
+  });
+  const total = 3 + count * 3;
   const xref = length;
-  push(`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`);
-  push(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  push(`xref\n0 ${total}\n0000000000 65535 f \n${offsets.slice(1).map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`);
+  push(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   const out = new Uint8Array(length);
   let pos = 0;
   for (const p of parts) { out.set(p, pos); pos += p.length; }
@@ -842,80 +884,42 @@ function toBase64(bytes) {
   return btoa(bin);
 }
 
-function timestampName(ext) {
+function timestampName(ext, suffix = '') {
   const t = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  return `SnapRead_${t.getFullYear()}${p(t.getMonth() + 1)}${p(t.getDate())}_${p(t.getHours())}${p(t.getMinutes())}${p(t.getSeconds())}.${ext}`;
+  return `SnapRead_${t.getFullYear()}${p(t.getMonth() + 1)}${p(t.getDate())}_${p(t.getHours())}${p(t.getMinutes())}${p(t.getSeconds())}${suffix}.${ext}`;
 }
 
 // 앱: 임시 파일로 만든 뒤 공유 창을 띄움 (파일 앱·드라이브에 저장하거나 다른 앱으로 보낼 수 있음)
 // 웹: 파일로 내려받음
 async function saveOrShare(bytes, filename, mime, dialogTitle) {
+  return saveOrShareMany([{ bytes, filename, mime }], dialogTitle);
+}
+
+// 여러 파일을 한 번에 (연속 스캔의 JPG 여러 장)
+async function saveOrShareMany(files, dialogTitle) {
   const { Filesystem, Share } = plugins;
   if (Filesystem && Share) {
-    const file = await Filesystem.writeFile({ path: filename, data: toBase64(bytes), directory: 'CACHE' });
-    await Share.share({ title: dialogTitle, files: [file.uri], dialogTitle });
+    const uris = [];
+    for (const f of files) {
+      const file = await Filesystem.writeFile({ path: f.filename, data: toBase64(f.bytes), directory: 'CACHE' });
+      uris.push(file.uri);
+    }
+    await Share.share({ title: dialogTitle, files: uris, dialogTitle });
     return;
   }
-  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-}
-
-function scanChoice(name) {
-  return document.querySelector(`input[name="${name}"]:checked`).value;
-}
-
-function renderScanPreview() {
-  const src = sourceCanvas();
-  const k = Math.min(1, 900 / Math.max(src.width, src.height));
-  const small = document.createElement('canvas');
-  small.width = Math.max(1, Math.round(src.width * k));
-  small.height = Math.max(1, Math.round(src.height * k));
-  small.getContext('2d').drawImage(src, 0, 0, small.width, small.height);
-  const shown = applyScanFilter(small, scanChoice('scan-filter'));
-  scanPreview.width = shown.width;
-  scanPreview.height = shown.height;
-  scanPreview.getContext('2d').drawImage(shown, 0, 0);
-}
-
-$('btn-scan').addEventListener('click', () => {
-  if (!hasPhoto) return;
-  $('scan-scope').textContent = region ? '선택한 부분만 저장합니다' : '사진 전체를 저장합니다 (일부만 저장하려면 글자 부분을 드래그하세요)';
-  setStatus(scanStatus, '');
-  scanOverlay.hidden = false;
-  renderScanPreview();
-});
-document.querySelectorAll('input[name="scan-filter"]').forEach((el) => el.addEventListener('change', renderScanPreview));
-$('scan-close').addEventListener('click', () => { scanOverlay.hidden = true; });
-scanOverlay.addEventListener('click', (e) => { if (e.target === scanOverlay) scanOverlay.hidden = true; });
-
-$('scan-save').addEventListener('click', async () => {
-  const btn = $('scan-save');
-  btn.disabled = true;
-  setStatus(scanStatus, '만드는 중…');
-  try {
-    const out = applyScanFilter(sourceCanvas(), scanChoice('scan-filter'));
-    const jpeg = await canvasToJpeg(out);
-    if (scanChoice('scan-format') === 'pdf') {
-      await saveOrShare(makePdf(jpeg, out.width, out.height), timestampName('pdf'), 'application/pdf', '스캔 PDF 저장');
-    } else {
-      await saveOrShare(jpeg, timestampName('jpg'), 'image/jpeg', '스캔 이미지 저장');
-    }
-    setStatus(scanStatus, '완료');
-  } catch (err) {
-    // 공유 창을 그냥 닫은 경우는 오류로 보지 않음
-    if (/cancel/i.test(String(err?.message || err))) setStatus(scanStatus, '');
-    else { console.error(err); setStatus(scanStatus, `오류: ${err.message || err}`); }
-  } finally {
-    btn.disabled = false;
+  for (const f of files) {
+    const url = URL.createObjectURL(new Blob([f.bytes], { type: f.mime }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = f.filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    if (files.length > 1) await new Promise((r) => setTimeout(r, 300));
   }
-});
+}
 
 /* ---------- 구글 이미지 검색 ---------- */
 
@@ -982,6 +986,7 @@ async function loadCurrentVersion() {
     if (plugins.App?.getInfo) currentVersion = (await plugins.App.getInfo()).version;
   } catch (err) { console.warn('버전을 읽지 못함', err); }
   $('info-version').textContent = currentVersion || '웹 버전';
+  if (currentVersion) $('home-foot').textContent = `Snap Read v${currentVersion} · 이현덕 (hdlee73@gmail.com)`;
 }
 
 function renderUpdate(state) {

@@ -82,6 +82,161 @@ async function needText(title) {
   return text;
 }
 
+/* ---------- 사용 방법 안내 ---------- */
+
+const HELP = {
+  translate: {
+    title: '사진 번역',
+    steps: [
+      '번역할 글자가 화면 틀 안에 크게 보이게 하고, 하얀 동그란 촬영 버튼을 누르세요. 아래 왼쪽 버튼으로 갤러리 사진을 골라도 됩니다.',
+      '촬영하면 글자를 자동으로 추출해 한국어로 번역한 결과가 나옵니다.',
+      '글자가 사진 일부에만 있으면 그 부분을 손가락으로 드래그하세요. 그 부분만 다시 인식합니다. 두 손가락으로 확대·이동도 됩니다.',
+      '사진 속 글자가 영어가 아니면 결과 창 위쪽에서 언어를 바꾸세요. 잘못 읽은 글자는 직접 고친 뒤 "다시 번역"을 누르면 됩니다.',
+    ],
+    tip: '글자가 흔들리거나 그림자가 지면 인식이 잘 안 됩니다. 밝은 곳에서 글자와 화면을 나란히 맞춰 찍어 보세요.',
+  },
+  ar: {
+    title: '실시간 번역',
+    steps: [
+      '촬영 버튼은 없습니다. 카메라를 글자에 비추기만 하면 번역이 글자 위에 바로 겹쳐서 나옵니다.',
+      '휴대폰을 가만히 들고 글자에 초점이 맞을 때까지 1~2초 기다려 주세요. 화면 아래에 지금 하는 일이 표시됩니다.',
+      '위쪽 목록에서 비추는 글자의 언어를 고르세요. 영어 외 언어는 처음 한 번 인터넷으로 언어 데이터를 받습니다.',
+      '"끄기"를 누르면 메뉴로 돌아갑니다. 사진으로 남기고 싶으면 "사진 번역"을 쓰세요.',
+    ],
+    tip: '실시간 번역은 인터넷 연결이 필요합니다. 큰 글자가 또렷할수록 잘 됩니다.',
+  },
+  scan: {
+    title: '북스캔 · 문서 스캔',
+    steps: [
+      '위쪽 스위치에서 "한 쪽" 또는 "두 쪽 펼침"을 고르고, 가이드 틀 안에 책이나 문서를 맞춰 촬영하세요. 두 쪽이면 노란 점선을 책 가운데(제본선)에 맞춥니다.',
+      '편집 화면에서 네 모서리 점을 책 모서리에 맞게 끌어 주세요. 처음엔 자동으로 찾아 줍니다. "두 쪽으로 나누기"를 켜면 가운데 두 점으로 쪽 경계를 맞춥니다.',
+      '"평평하게 펴기"는 기울어 찍힌 쪽을 반듯한 사각형으로 펴 주고, "선명(컬러)"는 책 가운데 그림자를 옅게 합니다. "결과 보기"로 미리 확인하세요.',
+      '"다음 쪽 촬영"으로 계속 찍고, 다 찍으면 "완료"에서 PDF 한 파일 또는 JPG 여러 장으로 저장합니다.',
+    ],
+    tip: '밝은 곳에서 손이나 휴대폰 그림자가 지지 않게 찍고, 책은 손으로 눌러 최대한 평평하게 펴 주세요. 심하게 휘어진 쪽의 곡면은 완전히 펴지지 않습니다.',
+  },
+  card: {
+    title: '명함 저장',
+    steps: [
+      '명함을 가이드 틀에 꽉 차게 맞추고, 글자가 수평이 되게 촬영하세요.',
+      '이름·회사·전화·이메일을 자동으로 찾아 채워 줍니다. 틀린 곳은 고친 뒤 "저장"을 누르세요.',
+      '"연락처로 보내기"를 누르면 휴대폰 연락처 앱에 저장할 수 있습니다. 저장한 명함은 보관함에서 다시 봅니다.',
+    ],
+  },
+  table: {
+    title: '표 → CSV',
+    steps: [
+      '표 전체가 가이드 틀 안에 들어오게 하고, 표 선이 화면과 나란하도록 맞춰 촬영하세요.',
+      '칸을 나눠 읽은 결과가 쉼표(,)로 구분된 글로 나옵니다. 고친 뒤 "CSV 저장"을 누르면 엑셀에서 열 수 있는 파일이 됩니다.',
+      '표의 일부만 필요하면 찍기 전에 필요한 부분만 틀에 맞추세요.',
+    ],
+  },
+  search: {
+    title: '구글 이미지 검색',
+    steps: [
+      '검색할 물건·간판·그림을 가이드 틀 가운데에 넣고 촬영하세요.',
+      '공유 창이 열리면 "구글 렌즈"나 "구글" 앱을 골라 이미지를 보내면 비슷한 이미지와 정보를 찾아 줍니다.',
+    ],
+  },
+  vocab: {
+    title: '단어장에 담기',
+    steps: [
+      '글자가 있는 곳을 촬영하면 글자가 추출됩니다.',
+      '추출된 글자(번역 결과 창)에서 단어를 길게 눌러 고른 뒤 "단어장" 버튼을 누르면 뜻과 함께 저장됩니다.',
+      '저장한 단어는 메뉴의 보관함 → 단어장에서 카드로 복습할 수 있습니다.',
+    ],
+  },
+  qr: {
+    title: 'QR·바코드',
+    steps: [
+      'QR코드나 바코드를 가이드 틀 안에 맞추면 자동으로 읽습니다. 촬영 버튼은 없습니다.',
+      '링크는 바로 열고, 와이파이는 비밀번호를 복사하고, 상품 바코드는 검색해 줍니다.',
+    ],
+  },
+};
+
+const helpHtml = (h) => `<ol class="help-steps">${h.steps.map((t) => `<li>${esc(t)}</li>`).join('')}</ol>${h.tip ? `<p class="help-tip">${esc(h.tip)}</p>` : ''}`;
+
+// 기능마다 처음 들어갈 때 한 번 자동으로 보여 주고, 이후에는 위쪽 ? 버튼으로 다시 볼 수 있다
+function showHelp(act, { first = false } = {}) {
+  const h = HELP[act];
+  if (!h) return;
+  store.set(`help_${act}`, '1');
+  openForm(`${h.title} 사용 방법`, [], [{ label: '알겠어요', primary: true }],
+    helpHtml(h) + (first ? '<p class="status" style="text-align:left">나중에 위쪽 ? 버튼에서 다시 볼 수 있어요.</p>' : ''));
+}
+
+function showAllHelp() {
+  openForm('사용 방법', [], [{ label: '닫기' }],
+    Object.values(HELP).map((h) => `<details class="help-item"><summary>${esc(h.title)}</summary>${helpHtml(h)}</details>`).join(''));
+}
+
+$('btn-help').addEventListener('click', () => showHelp(pendingAct));
+
+/* ---------- 촬영 가이드 (틀 + 안내 문구) ---------- */
+
+// ar: 틀의 가로/세로 비율 (null 이면 화면 가득 모서리 표시만)
+const GUIDES = {
+  translate: { ar: null, text: '번역할 글자가 화면에 크게, 또렷하게 보이게 하고 촬영하세요' },
+  vocab: { ar: null, text: '단어를 고를 글자가 크게 보이게 하고 촬영하세요' },
+  card: { ar: 1.586, dim: true, rounded: true, text: '명함을 틀에 꽉 차게 맞추고, 글자가 수평이 되게 찍으세요' },
+  table: { ar: 1.3, dim: true, grid: true, text: '표 전체를 틀 안에 넣고, 표 선이 화면과 나란하게 맞추세요' },
+  search: { ar: 1, dim: true, rounded: true, text: '검색할 물건·간판을 틀 가운데에 넣으세요' },
+  qr: { ar: 1, dim: true, rounded: true, live: true, text: 'QR코드·바코드를 틀 안에 맞추면 자동으로 읽습니다' },
+  scan: { dynamic: true },
+};
+
+function currentGuide() {
+  const g = GUIDES[pendingAct];
+  if (!g) return null;
+  if (!g.dynamic) return g;
+  const spread = bookMode() === 'spread';
+  return {
+    ar: spread ? 1.42 : 0.72, dim: true, spine: spread, top: 112,
+    text: spread ? '책을 틀에 맞추고, 노란 점선을 책 가운데(제본선)에 맞추세요' : '한 쪽(문서)을 틀에 꽉 차게 맞추세요',
+  };
+}
+
+function layoutGuide() {
+  const g = currentGuide();
+  const guide = $('guide');
+  if (!g || !inCameraMode()) { guide.hidden = true; return; }
+  guide.hidden = false;
+  const W = media.clientWidth, H = media.clientHeight;
+  const top = g.top || 70, bottom = 54;
+  const maxW = W - 24, maxH = Math.max(80, H - top - bottom);
+  let w = maxW, h = maxH;
+  if (g.ar) { w = Math.min(maxW, maxH * g.ar); h = w / g.ar; }
+  const frame = $('guide-frame');
+  frame.style.width = `${Math.round(w)}px`;
+  frame.style.height = `${Math.round(h)}px`;
+  frame.style.left = `${Math.round((W - w) / 2)}px`;
+  frame.style.top = `${Math.round(top + (maxH - h) / 2)}px`;
+  frame.className = `guide-frame${g.dim ? ' dim' : ''}${g.rounded ? ' rounded' : ''}${g.grid ? ' grid' : ''}${g.live ? ' live-frame' : ''}`;
+  $('guide-spine').hidden = !g.spine;
+  $('guide-text').textContent = g.text;
+}
+window.addEventListener('resize', layoutGuide);
+
+// 북스캔: 한 쪽 / 두 쪽 선택 (선택은 기억)
+const bookMode = () => document.querySelector('input[name="book-mode"]:checked').value;
+{
+  const saved = store.get('bookMode');
+  const el = document.querySelector(`input[name="book-mode"][value="${saved === 'single' ? 'single' : 'spread'}"]`);
+  if (el) el.checked = true;
+}
+document.querySelectorAll('input[name="book-mode"]').forEach((el) => el.addEventListener('change', () => {
+  store.set('bookMode', bookMode());
+  layoutGuide();
+}));
+
+// app.js 의 setMode('camera') 가 부른다
+function onCameraMode() {
+  $('book-bar').hidden = pendingAct !== 'scan';
+  if (typeof updateBookBar === 'function') updateBookBar();
+  layoutGuide();
+}
+
 /* ---------- 첫 화면 메뉴 ---------- */
 
 // 메뉴에서 고른 기능. 촬영 화면으로 가서, 사진을 찍으면 바로 이어서 실행한다
@@ -89,19 +244,21 @@ let pendingAct = null;
 const LIVE_ACTS = { ar: () => startLive('ar'), qr: () => startLive('qr') };
 const PHOTO_ACTS = {
   translate: () => $('btn-open-result').click(),
-  scan: () => $('btn-scan').click(),
+  scan: () => openBookEditor(),
   search: () => $('btn-search').click(),
   card: openCard, table: openTable, vocab: openVocab,
 };
 
-function goHome() {
+function goHome(force = false) {
+  if (!force && typeof bookPages !== 'undefined' && bookPages.length && !confirm(`찍어 둔 ${bookPages.length}쪽이 사라집니다. 메뉴로 갈까요?`)) return;
+  if (typeof resetBook === 'function') resetBook();
   pendingAct = null;
   hasPhoto = false;
   stopLive();
   formOverlay.hidden = true;
   setMode('home');
 }
-$('btn-menu').addEventListener('click', goHome);
+$('btn-menu').addEventListener('click', () => goHome());
 
 // 사진이 찍히면(또는 골라지면) 메뉴에서 고른 기능을 이어서 실행
 function onPhotoReady() {
@@ -109,12 +266,15 @@ function onPhotoReady() {
   if (act) setTimeout(act, 0);
 }
 
-document.querySelectorAll('#home .menu-item').forEach((el) => el.addEventListener('click', () => {
+document.querySelectorAll('#home .row').forEach((el) => el.addEventListener('click', () => {
   const act = el.dataset.act;
   if (act === 'library') { showLibrary(); return; }
+  if (act === 'help') { showAllHelp(); return; }
   pendingAct = act;
+  if (typeof resetBook === 'function') resetBook();
   setMode('camera');
   if (LIVE_ACTS[act]) setTimeout(LIVE_ACTS[act], 0);
+  if (!store.get(`help_${act}`)) showHelp(act, { first: true });
 }));
 
 /* ---------- 명함 ---------- */
@@ -297,15 +457,28 @@ const liveBar = $('live-bar');
 let live = null; // { kind, stop }
 
 function stopLive() {
+  document.body.classList.remove('live-on');
+  $('live-hint').hidden = true;
   if (!live) return;
   live.stop();
   live = null;
   liveLayer.replaceChildren();
   liveLayer.hidden = true;
   liveBar.hidden = true;
+  // 실시간용으로 바꿔 둔 OCR 설정을 사진 인식용으로 되돌림
+  if (worker) worker.setParameters({ tessedit_pageseg_mode: '3' }).catch(() => {});
 }
 function onModeChange() { stopLive(); }
-$('live-stop').addEventListener('click', stopLive);
+// 끄기: 카메라만 켜진 빈 화면으로 남기지 않고 메뉴로 돌아간다
+$('live-stop').addEventListener('click', () => goHome(true));
+$('live-flip').addEventListener('click', () => $('btn-switch').click());
+
+function setLiveHint(text, error = false) {
+  const el = $('live-hint');
+  el.hidden = !text;
+  el.textContent = text || '';
+  el.classList.toggle('error', error);
+}
 
 // 카메라 영상에서 작은 프레임을 떠낸다
 function grabFrame(maxSide) {
@@ -322,19 +495,25 @@ function grabFrame(maxSide) {
 function startLive(kind) {
   stopLive();
   if (!inCameraMode()) return;
+  document.body.classList.add('live-on');
   liveBar.hidden = false;
   liveLayer.hidden = false;
-  $('live-title').textContent = kind === 'qr' ? 'QR·바코드를 비춰 주세요' : '실시간 번역';
+  $('live-title').textContent = kind === 'qr' ? 'QR·바코드' : '실시간 번역';
   const lang = $('live-lang');
   if (lang) lang.remove();
   if (kind === 'ar') {
     const sel = document.createElement('select');
     sel.id = 'live-lang';
+    sel.setAttribute('aria-label', '비추는 글자의 언어');
     sel.innerHTML = ocrLang.innerHTML;
     sel.value = ocrLang.value;
     sel.addEventListener('change', () => { ocrLang.value = sel.value; store.set('ocrLang', sel.value); liveLayer.replaceChildren(); });
     $('live-title').after(sel);
+    setLiveHint('카메라를 글자에 비추고 잠깐 가만히 들고 계세요');
+  } else {
+    setLiveHint('');
   }
+  layoutGuide();
   let alive = true;
   live = { kind, stop() { alive = false; } };
   (kind === 'qr' ? qrLoop : arLoop)(() => alive);
@@ -392,40 +571,71 @@ function showCode({ text, format }) {
 
 /* 실시간 번역 */
 
-const arCache = new Map(); // 원문 → 번역
+// 원문 → 번역. 같은 글자가 조금씩 다르게 읽혀도 한 번만 번역하도록 정규화한 글자를 키로 쓴다
+const arCache = new Map();
+const arKey = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 async function translateLine(text) {
-  if (arCache.has(text)) return arCache.get(text);
-  arCache.set(text, ''); // 중복 요청 방지
+  const key = arKey(text);
+  if (!key) return '';
+  if (arCache.has(key)) return arCache.get(key);
+  arCache.set(key, ''); // 중복 요청 방지
   try {
     const t = await translateGoogle(text);
-    arCache.set(text, t);
+    arCache.set(key, t);
     return t;
-  } catch { arCache.delete(text); return ''; }
+  } catch (err) {
+    arCache.delete(key);
+    throw err;
+  }
 }
 
 async function arLoop(alive) {
+  let empty = 0;
+  let netFail = 0;
   while (alive()) {
-    const frame = grabFrame(1000);
+    const frame = grabFrame(1280);
     if (!frame) { await sleep(300); continue; }
     try {
       const lang = ocrLang.value;
+      if (!workerReady(lang)) setLiveHint('글자 인식 엔진을 준비하는 중… (처음 한 번만 걸려요)');
       const w = await getWorker(lang);
+      if (!alive()) return;
+      // 실시간은 화면 속 글자가 여러 군데 흩어져 있으므로 흩어진 글자 모드로 읽는다
+      await w.setParameters({ tessedit_pageseg_mode: '11' });
       const { data } = await w.recognize(frame.c);
       if (!alive()) return;
-      const min = minConfidenceFor(lang);
-      // 위치(bbox)가 필요하므로 줄마다 따로 신뢰도 검사
-      const picked = (data.lines || []).filter((l) => readLines({ lines: [l] }, lang, Math.max(min, 60)).length);
-      const items = picked.slice(0, 8).map((l) => ({ text: fixCommonErrors(l.text.trim(), lang), bbox: l.bbox }));
-      await Promise.all(items.filter((it) => lang !== 'kor' && !arCache.has(it.text)).slice(0, 4).map((it) => translateLine(it.text)));
-      if (!alive()) return;
-      drawLabels(items, frame);
+      // 위치(bbox)가 필요하므로 줄마다 따로 신뢰도 검사. 움직이는 영상이라 사진보다 기준을 낮춘다
+      const min = Math.max(25, minConfidenceFor(lang) - 10);
+      const picked = (data.lines || []).filter((l) => readLines({ lines: [l] }, lang, min).length);
+      const items = picked.slice(0, 10).map((l) => ({ text: fixCommonErrors(l.text.trim(), lang), bbox: l.bbox }));
+      if (!items.length) {
+        if (++empty >= 3) setLiveHint('글자를 찾지 못했어요. 글자에 더 가까이, 또렷하게 비춰 주세요');
+        liveLayer.replaceChildren();
+      } else {
+        empty = 0;
+        const todo = lang === 'kor' ? [] : items.filter((it) => !arCache.has(arKey(it.text))).slice(0, 4);
+        if (todo.length) setLiveHint('번역하는 중…');
+        const results = await Promise.allSettled(todo.map((it) => translateLine(it.text)));
+        if (!alive()) return;
+        if (results.length && results.every((r) => r.status === 'rejected')) {
+          if (++netFail >= 2) setLiveHint(`번역하지 못했어요: ${results[0].reason?.message || '인터넷 연결을 확인하세요'}`, true);
+        } else {
+          netFail = 0;
+          setLiveHint('');
+        }
+        drawLabels(items, frame);
+      }
     } catch (err) {
       console.warn('실시간 번역 실패', err);
-      await sleep(1000);
+      if (alive()) setLiveHint(`글자 인식 오류: ${err.message || err}`, true);
+      await sleep(1500);
     }
-    await sleep(200);
+    await sleep(150);
   }
 }
+
+// 지금 언어의 OCR 엔진이 이미 준비돼 있는지
+const workerReady = (lang) => !!worker && workerLang === lang;
 
 function drawLabels(items, frame) {
   const cw = video.clientWidth, ch = video.clientHeight;
@@ -433,16 +643,19 @@ function drawLabels(items, frame) {
   const ox = (cw - frame.vw * k) / 2, oy = (ch - frame.vh * k) / 2;
   const k2 = k / frame.s;
   liveLayer.replaceChildren(...items.map((it) => {
-    const t = arCache.get(it.text);
-    if (!t || t === it.text) return '';
+    const t = arCache.get(arKey(it.text));
+    if (!t || arKey(t) === arKey(it.text)) return '';
     const el = document.createElement('div');
     el.className = 'ar-label';
     const h = (it.bbox.y1 - it.bbox.y0) * k2;
     el.textContent = t;
-    el.style.left = `${ox + it.bbox.x0 * k2}px`;
-    el.style.top = `${oy + it.bbox.y0 * k2}px`;
-    el.style.minWidth = `${(it.bbox.x1 - it.bbox.x0) * k2}px`;
-    el.style.fontSize = `${Math.max(11, Math.min(22, h * 0.8))}px`;
+    // 화면 밖으로 잘린 글자의 번역도 화면 안에서 보이도록 위치를 안으로 당김
+    const left = Math.min(Math.max(2, ox + it.bbox.x0 * k2), Math.max(2, cw - 60));
+    el.style.left = `${left}px`;
+    el.style.top = `${Math.max(2, oy + it.bbox.y0 * k2)}px`;
+    el.style.minWidth = `${Math.min((it.bbox.x1 - it.bbox.x0) * k2, cw - left - 2)}px`;
+    el.style.maxWidth = `${cw - left - 2}px`;
+    el.style.fontSize = `${Math.max(12, Math.min(24, h * 0.8))}px`;
     return el;
   }).filter(Boolean));
 }
