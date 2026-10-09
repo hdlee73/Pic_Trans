@@ -49,6 +49,7 @@ let cameraRun = 0;
 let facingMode = 'environment';
 let hasPhoto = false;
 let region = null; // 인식할 영역 (사진 좌표). null 이면 사진 전체
+let photoGuide = null; // 촬영 때 화면에 보인 가이드 틀 (사진 전체 기준 0~1 비율). 갤러리 사진은 null
 
 /* ---------- 화면 모드: 카메라 ↔ 사진 ---------- */
 
@@ -129,12 +130,15 @@ $('btn-capture').addEventListener('click', () => {
   const vw = video.videoWidth, vh = video.videoHeight;
   const k = Math.max(video.clientWidth / vw, video.clientHeight / vh);
   const sw = Math.min(vw, video.clientWidth / k), sh = Math.min(vh, video.clientHeight / k);
+  // 화면에 보이던 가이드 틀이 사진의 어디에 해당하는지 기억 (사진 = 화면에 보이던 영상 전체)
+  photoGuide = typeof guideRectNorm === 'function' ? guideRectNorm() : null;
   drawToCanvas(video, sw, sh, { x: (vw - sw) / 2, y: (vh - sh) / 2 });
 });
 
 $('file-input').addEventListener('change', (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
+  photoGuide = null;
   const img = new Image();
   img.onload = () => {
     drawToCanvas(img, img.naturalWidth, img.naturalHeight);
@@ -702,6 +706,7 @@ function closePopup() {
 // 번역 버튼: 팝업을 열고, 아직 추출·번역 전이면 이어서 진행
 $('btn-open-result').addEventListener('click', () => {
   if (!hasPhoto) return;
+  if (pendingAct === 'vocab') { openVocabPicker(); return; }
   popup.hidden = false;
   const text = ocrText.value.trim();
   if (ocrBusy) {

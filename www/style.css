@@ -597,3 +597,11 @@ details.help-item .help-steps { margin-top: 8px; }
   background: rgba(0, 0, 0, .65); color: #fff; font-size: 13px; line-height: 22px; cursor: pointer;
 }
 .thumb button.mv { right: auto; left: 3px; }
+
+/* 단어 고르기 */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; max-height: 44vh; overflow: auto; }
+.chip {
+  font: inherit; font-size: 15px; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--field); color: var(--text);
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }

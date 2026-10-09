@@ -292,6 +292,7 @@ function bsEnsureDom() {
         <button id="bs-split" class="btn" type="button">두 쪽으로 나누기</button>
         <button id="bs-flat" class="btn" type="button">평평하게 펴기</button>
         <button id="bs-auto" class="btn" type="button">자동 맞추기</button>
+        <button id="bs-frame" class="btn" type="button" hidden>틀 그대로</button>
         <button id="bs-rot" class="btn" type="button">돌리기</button>
       </div>
       <div class="seg" id="bs-filter" role="radiogroup" aria-label="보정">
@@ -308,7 +309,7 @@ function bsEnsureDom() {
     </div>
   </div>`);
   const d = {};
-  for (const id of ['bs', 'bs-close', 'bs-count', 'bs-stage', 'bs-wrap', 'bs-canvas', 'bs-svg', 'bs-loupe', 'bs-preview', 'bs-hint', 'bs-busy', 'bs-split', 'bs-flat', 'bs-auto', 'bs-rot', 'bs-view', 'bs-next', 'bs-done']) d[id] = $(id);
+  for (const id of ['bs', 'bs-close', 'bs-count', 'bs-stage', 'bs-wrap', 'bs-canvas', 'bs-svg', 'bs-loupe', 'bs-preview', 'bs-hint', 'bs-busy', 'bs-split', 'bs-flat', 'bs-auto', 'bs-frame', 'bs-rot', 'bs-view', 'bs-next', 'bs-done']) d[id] = $(id);
   bs.dom = d;
 
   d['bs-close'].addEventListener('click', bsClose);
@@ -319,8 +320,17 @@ function bsEnsureDom() {
   });
   d['bs-flat'].addEventListener('click', () => { bs.flatten = !bs.flatten; bsRefresh(); });
   d['bs-auto'].addEventListener('click', () => bsAutoFit(true));
+  // 촬영 때 보이던 가이드 틀 그대로 영역을 잡는다 (자동 맞추기가 어긋날 때)
+  d['bs-frame'].addEventListener('click', () => {
+    if (!bs.guideQuad) return;
+    bs.quad = bs.guideQuad.map((p) => ({ ...p }));
+    if (bs.split) bs.spine = [0.5, 0.5];
+    bsRefresh();
+  });
   d['bs-rot'].addEventListener('click', () => {
     bs.src = rotateCanvas(bs.src, 90);
+    bs.guideQuad = null; // 돌린 뒤에는 가이드 틀 위치가 맞지 않음
+    d['bs-frame'].hidden = true;
     bsAutoFit(false);
   });
   d['bs-view'].addEventListener('click', () => { bs.view = bs.view === 'edit' ? 'preview' : 'edit'; bsRefresh(); });
@@ -489,7 +499,12 @@ async function bsAutoFit(announce) {
   const found = !!q;
   if (!q) {
     const mx = src.width * 0.06, my = src.height * 0.08;
-    q = [{ x: mx, y: my }, { x: src.width - mx, y: my }, { x: src.width - mx, y: src.height - my }, { x: mx, y: src.height - my }];
+    q = bs.guideQuad ? bs.guideQuad.map((p) => ({ ...p })) : [{ x: mx, y: my }, { x: src.width - mx, y: my }, { x: src.width - mx, y: src.height - my }, { x: mx, y: src.height - my }];
+  }
+  // 가이드 틀로 찍었다면 틀 밖으로 나간 점은 틀 안으로 당긴다 (틀 밖은 스캔하지 않음)
+  if (bs.guideQuad) {
+    const [g0, g1, g2] = bs.guideQuad;
+    q = q.map((p) => ({ x: Math.min(g1.x, Math.max(g0.x, p.x)), y: Math.min(g2.y, Math.max(g0.y, p.y)) }));
   }
   bs.quad = q;
   if (bs.split) { const t = await bsSpineGuess(); bs.spine = [t, t]; }
@@ -501,7 +516,21 @@ async function bsAutoFit(announce) {
 async function openBookEditor() {
   if (!hasPhoto) return;
   const d = bsEnsureDom();
-  bs.src = canvas; // 사진 화면의 캔버스 (읽기만 함)
+  bs.guideQuad = null;
+  if (photoGuide && !region) {
+    // 가이드 틀 안쪽(+조금 여유)만 편집·검출 대상으로 삼는다. 틀 밖은 보지 않는다
+    const g = photoGuide, pad = 0.03;
+    const x0 = Math.max(0, Math.floor((g.x - g.w * pad) * canvas.width)), y0 = Math.max(0, Math.floor((g.y - g.h * pad) * canvas.height));
+    const x1 = Math.min(canvas.width, Math.ceil((g.x + g.w * (1 + pad)) * canvas.width)), y1 = Math.min(canvas.height, Math.ceil((g.y + g.h * (1 + pad)) * canvas.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(16, x1 - x0); c.height = Math.max(16, y1 - y0);
+    c.getContext('2d').drawImage(canvas, x0, y0, c.width, c.height, 0, 0, c.width, c.height);
+    bs.src = c;
+    const gx = g.x * canvas.width - x0, gy = g.y * canvas.height - y0, gw = g.w * canvas.width, gh = g.h * canvas.height;
+    bs.guideQuad = [{ x: gx, y: gy }, { x: gx + gw, y: gy }, { x: gx + gw, y: gy + gh }, { x: gx, y: gy + gh }];
+  } else {
+    bs.src = canvas; // 사진 화면의 캔버스 (읽기만 함)
+  }
   bs.src._stamp = (bs.src._stamp || 0) + 1;
   srcDataFor = null;
   bs.view = 'edit';
@@ -509,6 +538,7 @@ async function openBookEditor() {
   bs.flatten = true;
   bs.filter = document.querySelector('input[name="bs-filter"]:checked').value;
   d.bs.hidden = false;
+  d['bs-frame'].hidden = !bs.guideQuad;
   if (region) {
     bs.quad = [
       { x: region.left, y: region.top }, { x: region.left + region.width, y: region.top },
@@ -517,7 +547,7 @@ async function openBookEditor() {
     bs.spine = [0.5, 0.5];
     bsRefresh();
   } else {
-    bs.quad = [{ x: 0, y: 0 }, { x: bs.src.width, y: 0 }, { x: bs.src.width, y: bs.src.height }, { x: 0, y: bs.src.height }];
+    bs.quad = bs.guideQuad ? bs.guideQuad.map((p) => ({ ...p })) : [{ x: 0, y: 0 }, { x: bs.src.width, y: 0 }, { x: bs.src.width, y: bs.src.height }, { x: 0, y: bs.src.height }];
     bsRefresh();
     await bsAutoFit(true);
   }
